@@ -17,16 +17,6 @@ const argv = Yargs(process.argv.slice(2))
       required: true,
       describe: "Passphrase to encrypt the zip with. Prefer BWBU_PASSPHRASE environment variable."
     },
-    tempDir: {
-      alias: "d",
-      describe: "Temporary directory for storing the data while working",
-      default: "/tmp/bwbu/ws"
-    },
-    targetDir: {
-      alias: 't',
-      describe: "Target file for the zipped backup.",
-      default: "/tmp/bwbu/target"
-    }
   })
   .command(
     ["backup", "$0"],
@@ -34,6 +24,16 @@ const argv = Yargs(process.argv.slice(2))
     {
       bwSession: {
         describe: "Bitwarden Session Token, if this is provided the prior auth steps are not needed. Prefer use of BWBU_BW_SESSION environment variable.",
+      },
+      backupDir: {
+        alias: 'b',
+        describe: "Target file for the zipped backup.",
+        default: "/tmp/bwbu/target"
+      },
+      tempDir: {
+        alias: "d",
+        describe: "Temporary directory for storing the data while working",
+        default: "/tmp/bwbu/ws"
       },
       bwClientid: {
         alias: 'i',
@@ -48,6 +48,11 @@ const argv = Yargs(process.argv.slice(2))
       bwMasterpassword: {
         required: true,
         describe: 'Bitwarden master password, required by Bitwarden on exports. Prefer use of BWBY_BW_MASTERPASSWORD environment variable.'
+      },
+      ensureFresh: {
+        describe: "Indicate if temp folder should be cleaned out before starting. Used only for debugging.",
+        boolean: true,
+        default: true,
       },
       includePersonal: {
         describe: "Indicate if personal vault should be backed up.",
@@ -66,8 +71,18 @@ const argv = Yargs(process.argv.slice(2))
         boolean: true,
         default: true,
       },
+      archive: {
+        describe: "Indicate if target archive should be created. Used only for debugging.",
+        boolean: true,
+        default: true,
+      },
+      encrypt: {
+        describe: "Indicate if target archive should be encrypted, implies archive. Used only for debugging.",
+        boolean: true,
+        default: true,
+      },
       cleanUp: {
-        describe: "Indicate if temp directory should be removed after a job well done.",
+        describe: "Indicate if temp directory should be removed after a job well done. Used only for debugging.",
         boolean: true,
         default: true
       }
@@ -76,12 +91,17 @@ const argv = Yargs(process.argv.slice(2))
   )
   .command(
     "unpack",
-    "Unpacks given backup for manual access to files. (Not Implemented)",
+    "Unpacks given backup for manual access to files.",
     {
       sourceFile:{
         required: true,
         describe: "Source zip file with the backup."
-      }
+      },
+      unpackDir: {
+        alias: 'u',
+        describe: "Target file for the unzipped backup.",
+        default: "/tmp/bwbu/unpack"
+      },
     },
     unpack
   )

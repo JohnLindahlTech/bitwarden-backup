@@ -2,7 +2,7 @@ import { login, exportPersonalVault, exportPersonalFiles, unlock, listPersonalVa
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import filenamify from 'filenamify';
-import { PERSONAL_ATTACHMENTS_DIR, TARGET_FILE, PERSONAL, EXPORT_FILE, RAW_FILE, ORGANIZATION, ATTACHMENTS } from "./constants.mjs";
+import { PERSONAL_ATTACHMENTS_DIR, TARGET_FILE_PREFIX, PERSONAL, EXPORT_FILE, RAW_FILE, ORGANIZATION, ATTACHMENTS, TAR_FILE_EXTENSION } from "./constants.mjs";
 import logger from './log.mjs';
 import { encrypt, tar } from "./tar.mjs";
 
@@ -55,49 +55,88 @@ async function organizations(argv){
 
 
 export async function backup(argv){
+  let error;
 
   const time = new Date();
+  const _fileFormatedTime = time.toISOString().replaceAll(/[\.:]/g, '-')
+  const _tFileName = `${TARGET_FILE_PREFIX}-${_fileFormatedTime}${TAR_FILE_EXTENSION}`;
+  const targetFile = path.join(argv.backupDir, _tFileName);
+  try{
+    if(argv.ensureFresh){
+      logger.info(`Will now remove: ${argv.tempDir}`);
+      await fs.rm(argv.tempDir, {recursive: true, force: true});
+    } else {
+      logger.info(`Did not clean out temp dir, as it was not requested.`)
+    }
+    if(argv.includePersonal || argv.includeOrg){
+      if(argv.bwSession){
+        logger.info(`Got BW_SESSION token, will not login etc.`);
+      } else {
+        logger.info(`Will log into BW.`)
+        await login(argv);
+      
+        logger.info(`Will unlock BW.`)
+        const sessionToken = await unlock(argv);
+        argv.bwSession = sessionToken;
+      }
+      logger.info(`Will sync BW vault`);
+      await sync(argv);
+    } else {
+      logger.info(`No need to log in, unlock, sync as we will not fetch anything.`)
+    }
 
-  logger.info(`Will now remove: ${argv.tempDir}`);
-  await fs.rm(argv.tempDir, {recursive: true, force: true});
-  
-  if(argv.bwSession){
-    logger.info(`Got BW_SESSION token, will not login etc.`);
-  } else {
-    logger.info(`Will log into BW.`)
-    await login(argv);
-  
-    logger.info(`Will unlock BW.`)
-    const sessionToken = await unlock(argv);
-    argv.bwSession = sessionToken;
+    if(argv.includePersonal){
+      await personal(argv);
+    } else {
+      logger.info(`Did not export Personal vault, as it was not requested.`)
+    }
+
+    if(argv.includeOrg){
+      await organizations(argv);
+    } else {
+      logger.info(`Did not export Organization vaults, as it was not requested.`)
+    }
+
+    if(argv.archive || argv.encrypt){
+      logger.info(`Will archive to: ${targetFile}`)
+      await fs.mkdir(argv.backupDir, {recursive: true})
+      await tar(targetFile, argv.tempDir);
+    } else {
+      logger.info(`Did not archive, as it was not requested.`)
+    }
+
+    if(argv.encrypt){
+      logger.info(`Will encrypt archive to: ${targetFile}.7z`);
+      await encrypt(targetFile, argv);
+    } else {
+      logger.info(`Did not encrypt, as it was not requested`)
+    }
+
+  } catch(err){
+    // logger.error(err);
+    error = err;
+  } finally {
+    
+    if(argv.cleanUp){
+      logger.info(`Will remove unencrypted archive: ${targetFile}`);
+      try{
+        await fs.rm(targetFile, {recursive: true, force: true});
+      } catch (err){
+        logger.error(err);
+      }
+      
+      logger.info(`Will clean up temp directory: ${argv.tempDir}`);
+      try {
+        await fs.rm(argv.tempDir, {recursive: true, force: true});
+      } catch(err){
+        logger.error(err);
+      }
+    } else {
+      logger.info(`Will not clean up temp directory, as it was not requested.`)
+    }
   }
-  logger.info(`Will sync BW vault`);
-  await sync(argv);
-
-  if(argv.includePersonal){
-    await personal(argv);
-  } else {
-    logger.info(`Did not export Personal vault, as it was not requested.`)
+  if(error){
+    throw error
   }
-
-  if(argv.includeOrg){
-    await organizations(argv);
-  } else {
-    logger.info(`Did not export Organization vaults, as it was not requested.`)
-  }
-
-  const targetFile = path.join(argv.targetDir, TARGET_FILE(filenamify(time.toISOString())));
-  await fs.mkdir(argv.targetDir, {recursive: true})
-  await tar(targetFile, argv.tempDir);
-
-  await encrypt(targetFile, argv);
-
-  if(argv.cleanUp){
-    logger.info(`Will clean up temp directory: ${argv.tempDir}`);
-    await fs.rm(argv.tempDir, {recursive: true, force: true});
-  } else {
-    logger.info(`Will not clean up temp directory, as it was not requested.`)
-  }
-
   logger.info(`DONE!`)
 }

@@ -1,10 +1,15 @@
 # bitwarden-backup
 
-## Install
+## Install / Dependencies
+* `node@^18.12`
+* `pnpm`
+* `@bitwarden/cli` aka `bw`
+* `tar`
+* `7z`
+
 ### Mac
 ```bash
 pnpm add -g @bitwarden/cli
-brew install ccrypt
 ```
 
 ### Linux/Ubuntu
