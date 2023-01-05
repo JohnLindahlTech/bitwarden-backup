@@ -53,4 +53,4 @@ jobs:
         with:
           username: ${{ secrets.DOCKER_API_USER }}
           password: ${{ secrets.DOCKER_API_KEY }}
-          repository: peterevans/dockerhub-description
+          repository: ${{ env.IMAGE }}
