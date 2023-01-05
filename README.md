@@ -16,7 +16,7 @@ It supports:
 * Decrypt and unpack a backup archive to gain access to the backed up files.
 
 
-### Run Docker
+## Run
 
 Content of .env.docker
 ```ini
@@ -45,12 +45,12 @@ BWBU_SOURCE_FILE=
 
 ```
 
-#### Backup
+### Backup
 ```bash
 docker run --rm --env-file .env.docker -v /tmp/backup:/backup johnlindahl/bitwarden-backup
 ```
 
-#### Unpack a backup file
+### Unpack a backup file
 ```bash
 docker run --rm --env-file .env.docker -v /tmp/bwbu/backup:/backup -v /tmp/bwbu/unpack:/unpack johnlindahl/bitwarden-backup unpack
 ```
