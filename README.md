@@ -1,4 +1,10 @@
-# bitwarden-backup
+# johnlindahl/bitwarden-backup
+**[Github Repo](https://github.com/johnlindahltech/bitwarden-backup)**
+
+![GitHub Repo stars](https://img.shields.io/github/stars/johnlindahltech/bitwarden-backup)
+![GitHub watchers](https://img.shields.io/github/watchers/johnlindahltech/bitwarden-backup?style=flat-square)
+![GitHub forks](https://img.shields.io/github/forks/johnlindahltech/bitwarden-backup?style=flat-square)
+![GitHub Workflow Status (with branch)](https://img.shields.io/github/actions/workflow/status/johnlindahltech/bitwarden-backup/build.yaml?style=flat-square)
 
 This is a script for backing up your Bitwarden Vault in an encrypted archive.
 It supports:
