@@ -17,7 +17,7 @@ async function personal(argv){
   logger.info(`Will list BW personal vault for further processing, will save to: ${path.join(argv.tempDir, PERSONAL, RAW_FILE)}`)
   const vault = await listPersonalVault(argv);
 
-  logger.info(`Will store BW peronsal folders`);
+  logger.info(`Will store BW personal folders`);
   const folders = await listPersonalFolders(argv);
   if(argv.includeFiles){
     logger.info(`Will export personal attachments`)
@@ -64,7 +64,7 @@ export async function backup(argv){
   try{
     if(argv.ensureFresh){
       logger.info(`Will now remove: ${argv.tempDir}`);
-      await fs.rm(argv.tempDir, {recursive: true, force: true});
+      await fs.rm(path.join(argv.tempDir /*, '*' */), {recursive: true, force: true, });
     } else {
       logger.info(`Did not clean out temp dir, as it was not requested.`)
     }
@@ -127,7 +127,7 @@ export async function backup(argv){
       
       logger.info(`Will clean up temp directory: ${argv.tempDir}`);
       try {
-        await fs.rm(argv.tempDir, {recursive: true, force: true});
+        await fs.rm(path.join(argv.tempDir /*, '*' */), {recursive: true, force: true});
       } catch(err){
         logger.error(err);
       }

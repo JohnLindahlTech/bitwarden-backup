@@ -13,6 +13,7 @@
   "author": "",
   "license": "ISC",
   "dependencies": {
+    "@bitwarden/cli": "^2022.11.0",
     "dotenv": "^16.0.3",
     "execa": "^6.1.0",
     "filenamify": "^5.1.1",

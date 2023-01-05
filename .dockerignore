@@ -1,5 +1,5 @@
 .env
-.env.docker
 node_modules/
 *.log
 tmp/
+compose.yaml

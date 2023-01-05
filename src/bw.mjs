@@ -7,12 +7,14 @@ import {PERSONAL, EXPORT_FILE, RAW_FILE, PERSONAL_ATTACHMENTS_DIR, ORGANIZATION,
 
 const ALREADY_LOGGED_IN_REGEX = /^You are already logged in as/
 
+const BW_EXECUTABLE="node_modules/.bin/bw"
+
 export function getAttachmentDirPath({attachmentsDir, itemName, itemId, fileId}){
   return path.join(attachmentsDir, filenamify(itemName), filenamify(itemId),filenamify(fileId), '/')
 }
 
 export async function login(argv){
-  const cmdArgs = ["login"];
+  const cmdArgs = ["login", '--apikey'];
   const execaOpts = {
     env: {
       BW_CLIENTID: argv.bwClientid,
@@ -20,7 +22,7 @@ export async function login(argv){
     }
   }
   try{
-    const {stdout} = await execa("bw", cmdArgs, execaOpts)
+    const {stdout} = await execa(BW_EXECUTABLE, cmdArgs, execaOpts)
     logger.debug(stdout);
   } catch (err){
     if(ALREADY_LOGGED_IN_REGEX.test(err.stderr)){
@@ -42,7 +44,7 @@ export async function exportPersonalVault(argv){
     input: argv.bwMasterpassword
   }
   try{
-    const {stdout} = await execa("bw", cmdArgs, execaOpts)
+    const {stdout} = await execa(BW_EXECUTABLE, cmdArgs, execaOpts)
     logger.debug(stdout);
   } catch (err){
     throw err
@@ -60,7 +62,7 @@ export async function exportOrgVault(org, argv){
     input: argv.bwMasterpassword
   }
   try{
-    const {stdout} = await execa("bw", cmdArgs, execaOpts)
+    const {stdout} = await execa(BW_EXECUTABLE, cmdArgs, execaOpts)
     logger.debug(stdout);
   } catch (err){
     throw err
@@ -77,7 +79,7 @@ export async function sync(argv){
     },
   }
   try{
-    const {stdout} = await execa("bw", cmdArgs, execaOpts)
+    const {stdout} = await execa(BW_EXECUTABLE, cmdArgs, execaOpts)
     logger.debug(stdout);
   } catch (err){
     throw err
@@ -94,7 +96,7 @@ export async function listPersonalVault(argv){
     },
   }
   try{
-    const {stdout} = await execa("bw", cmdArgs, execaOpts)
+    const {stdout} = await execa(BW_EXECUTABLE, cmdArgs, execaOpts)
     logger.debug(stdout);
     const vault = await JSON.parse(stdout);
     await fs.writeFile(path.join(argv.tempDir, PERSONAL, RAW_FILE), JSON.stringify(vault, null, 2));
@@ -113,7 +115,7 @@ export async function listOrgVault(org, argv){
     },
   }
   try{
-    const {stdout} = await execa("bw", cmdArgs, execaOpts)
+    const {stdout} = await execa(BW_EXECUTABLE, cmdArgs, execaOpts)
     logger.debug(stdout);
     const vault = await JSON.parse(stdout);
     await fs.writeFile(path.join(argv.tempDir, ORGANIZATION, filenamify(org.name), RAW_FILE), JSON.stringify(vault, null, 2));
@@ -139,7 +141,7 @@ export async function exportFile({fileId, itemId, itemName, attachmentsDir}, org
   }
   try{
     await fs.mkdir(itemDir, {recursive: true});
-    const {stdout} = await execa("bw", cmdArgs, execaOpts)
+    const {stdout} = await execa(BW_EXECUTABLE, cmdArgs, execaOpts)
     logger.debug(stdout);
   } catch (err){
     logger.error(err)
@@ -150,7 +152,8 @@ export async function exportFile({fileId, itemId, itemName, attachmentsDir}, org
 export async function exportPersonalFiles(vault, argv){
   const itemsWithAttachments = vault.filter(item => item.attachments?.length > 0);
   const filesToFetch = itemsWithAttachments.flatMap((item) => item.attachments.map(attachment => ({itemId: item.id, itemName: item.name, fileName: attachment.fileName, fileId: attachment.id, attachmentsDir: path.join(argv.tempDir, PERSONAL_ATTACHMENTS_DIR)})))
-  for (const file of filesToFetch) {
+  for (const [index, file] of filesToFetch.entries()) {
+    logger.info(`Fetching file ${index + 1}/${filesToFetch.length}`)
     logger.debug(`Fetching ${file.itemName} - ${file.fileName}`)
     await exportFile(file, null, argv)
   }
@@ -160,7 +163,8 @@ export async function exportPersonalFiles(vault, argv){
 export async function exportOrgFiles(vault, org, argv){
   const itemsWithAttachments = vault.filter(item => item.attachments?.length > 0);
   const filesToFetch = itemsWithAttachments.flatMap((item) => item.attachments.map(attachment => ({itemId: item.id, itemName: item.name, fileName: attachment.fileName, fileId: attachment.id, attachmentsDir: path.join(argv.tempDir, ORGANIZATION, filenamify(org.name), ATTACHMENTS)})))
-  for (const file of filesToFetch) {
+  for (const [index, file] of filesToFetch.entries()) {
+    logger.info(`Fetching file ${index + 1}/${filesToFetch.length}`)
     logger.debug(`Fetching ${file.itemName} - ${file.fileName}`)
     await exportFile(file, argv)
   }
@@ -176,7 +180,7 @@ export async function unlock(argv){
     }
   }
   try{
-    const {stdout} = await execa("bw", cmdArgs, execaOpts)
+    const {stdout} = await execa(BW_EXECUTABLE, cmdArgs, execaOpts)
     logger.debug(stdout);
     return stdout;
   } catch (err){
@@ -194,7 +198,7 @@ export async function listOrgs(argv){
     },
   }
   try{
-    const {stdout} = await execa("bw", cmdArgs, execaOpts)
+    const {stdout} = await execa(BW_EXECUTABLE, cmdArgs, execaOpts)
     logger.debug(stdout);
     const orgs = await JSON.parse(stdout);
     await fs.writeFile(path.join(argv.tempDir, ORGANIZATION, LIST_FILE), JSON.stringify(orgs, null, 2));
@@ -215,7 +219,7 @@ export async function listPersonalFolders(argv){
     },
   }
   try{
-    const {stdout} = await execa("bw", cmdArgs, execaOpts)
+    const {stdout} = await execa(BW_EXECUTABLE, cmdArgs, execaOpts)
     logger.debug(stdout);
     const folders = await JSON.parse(stdout);
     await fs.writeFile(path.join(argv.tempDir, PERSONAL, FOLDERS_FILE), JSON.stringify(folders, null, 2));
@@ -235,7 +239,7 @@ export async function listOrgCollections(org, argv){
     },
   }
   try{
-    const {stdout} = await execa("bw", cmdArgs, execaOpts)
+    const {stdout} = await execa(BW_EXECUTABLE, cmdArgs, execaOpts)
     logger.debug(stdout);
     const collections = await JSON.parse(stdout);
     await fs.writeFile(path.join(argv.tempDir, ORGANIZATION, filenamify(org.name), COLLECTIONS_FILE), JSON.stringify(collections, null, 2));
