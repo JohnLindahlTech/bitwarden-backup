@@ -15,9 +15,6 @@ It supports:
 * Encrypts the archive with 7zip AES256 encryption with your own passphrase (Remember to keep it long!). This allows for non-vendor lock in backups (vs the BW native encrypted-json backup requires you restore to the same user account). 
 * Decrypt and unpack a backup archive to gain access to the backed up files.
 
-## Roadmap / TODO
-* Restore personal vault into a (new) Bitwarden Account from Backup archive.
-* Restore organizational vault(s) into a (new) Bitwarden Organization from Backup archive.
 
 ### Run Docker
 
@@ -56,3 +53,7 @@ docker run --rm --env-file .env.docker -v /tmp/backup:/backup johnlindahl/bitwar
 docker run --rm --env-file .env.docker -v /tmp/bwbu/backup:/backup -v /tmp/bwbu/unpack:/unpack johnlindahl/bitwarden-backup unpack
 
 ```
+
+## Roadmap / TODO
+* Restore personal vault into a (new) Bitwarden Account from Backup archive.
+* Restore organizational vault(s) into a (new) Bitwarden Organization from Backup archive.
