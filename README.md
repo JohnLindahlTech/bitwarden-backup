@@ -45,13 +45,14 @@ BWBU_SOURCE_FILE=
 
 ```
 
+#### Backup
 ```bash
-# Backup
 docker run --rm --env-file .env.docker -v /tmp/backup:/backup johnlindahl/bitwarden-backup
+```
 
-# Unpack a backup file
+#### Unpack a backup file
+```bash
 docker run --rm --env-file .env.docker -v /tmp/bwbu/backup:/backup -v /tmp/bwbu/unpack:/unpack johnlindahl/bitwarden-backup unpack
-
 ```
 
 ## Roadmap / TODO
