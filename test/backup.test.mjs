@@ -125,3 +125,28 @@ test('unpack hints at legacy .tar.gz archives', async () => {
   assert.match(warnings.join('\n'), /Legacy backup.*tar -xzf bw-backup-old\.tar\.gz/);
   await sb.cleanup();
 });
+
+test('unpack rejects an empty or missing source file and never touches the unpack dir', async () => {
+  const sb = await makeSandbox();
+  const unpackDir = path.join(sb.dir, 'unpacked');
+  await fs.mkdir(unpackDir);
+  for (const sourceFile of ['', undefined, path.join(sb.dir, 'nope.7z')]) {
+    await assert.rejects(unpack({ credentialsFile: sb.credentialsFile, sourceFile, unpackDir }, sb.deps), /No source file given|Source file not found/);
+  }
+  assert.ok(await exists(unpackDir));
+  await sb.cleanup();
+});
+
+test('unpack keeps a pre-existing empty target dir when extraction fails', async () => {
+  const sb = await makeSandbox();
+  const argv = sb.argv();
+  await backup(argv, sb.deps);
+  const [file] = await fs.readdir(argv.backupDir);
+  const unpackDir = path.join(sb.dir, 'unpacked');
+  const target = path.join(unpackDir, file.replace(/\.7z$/, ''));
+  await fs.mkdir(target, { recursive: true });
+  process.env.FAKE_7Z_PASSPHRASE = 'other';
+  await assert.rejects(unpack({ credentialsFile: sb.credentialsFile, sourceFile: path.join(argv.backupDir, file), unpackDir }, sb.deps), /Could not unpack/);
+  assert.ok(await exists(target)); // it was there before us, so we leave it
+  await sb.cleanup();
+});

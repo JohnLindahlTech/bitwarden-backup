@@ -6,13 +6,23 @@ import logger from './log.mjs';
 import { extractArchive } from './archive.mjs';
 
 export async function unpack(argv, deps = {}) {
+  if (!argv.sourceFile) {
+    throw new Error('No source file given: set BWBU_SOURCE_FILE or pass --sourceFile.');
+  }
+  const isFile = await fs.stat(argv.sourceFile).then((s) => s.isFile(), () => false);
+  if (!isFile) {
+    throw new Error(`Source file not found: ${argv.sourceFile}`);
+  }
   const { passphrase } = await loadCredentials(argv.credentialsFile, ['passphrase']);
 
   const name = path.basename(argv.sourceFile, ARCHIVE_FILE_EXTENSION);
   const targetDir = path.join(argv.unpackDir, name);
+  if (!name || path.resolve(targetDir) === path.resolve(argv.unpackDir)) {
+    throw new Error(`Cannot derive a sub directory name from: ${argv.sourceFile}`);
+  }
 
-  const existing = await fs.readdir(targetDir).catch((err) => (err.code === 'ENOENT' ? [] : Promise.reject(err)));
-  if (existing.length > 0) {
+  const existing = await fs.readdir(targetDir).catch((err) => (err.code === 'ENOENT' ? null : Promise.reject(err)));
+  if (existing?.length > 0) {
     throw new Error(`Refusing to unpack into non-empty directory: ${targetDir}`);
   }
   await fs.mkdir(targetDir, { recursive: true });
@@ -21,7 +31,10 @@ export async function unpack(argv, deps = {}) {
   try {
     await extractArchive({ sourceFile: argv.sourceFile, passphrase, targetDir }, deps);
   } catch (err) {
-    await fs.rm(targetDir, { recursive: true, force: true });
+    // Only remove what this run created, never a directory that was already there.
+    if (existing === null) {
+      await fs.rm(targetDir, { recursive: true, force: true });
+    }
     throw new Error(`Could not unpack the backup (wrong passphrase or corrupt archive?): ${err.shortMessage ?? err.message}`);
   }
   const extracted = await fs.readdir(targetDir);
