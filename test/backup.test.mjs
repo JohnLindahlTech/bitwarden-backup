@@ -19,6 +19,12 @@ test('backs up personal and org vaults including org attachments', async () => {
   assert.ok(await exists(path.join(argv.tempDir, 'personal', 'folders.json')));
   assert.ok(await exists(path.join(argv.tempDir, 'org', 'My Org', 'collections.json')));
 
+  // Regression: `bw list items` also returns org items, they belong in org/ only, not in personal/.
+  const personalItems = JSON.parse(await read('personal', 'items.json'));
+  assert.deepEqual(personalItems.map((i) => i.id), ['pi1', 'pi2']);
+  assert.equal((await sb.bwCalls()).some((c) => c.args.includes('xa1')), false);
+  assert.equal(await exists(path.join(argv.tempDir, 'personal', 'attachments', 'Org item seen via personal list')), false);
+
   // Regression: org attachments must be fetched with --organizationid.
   const orgFetches = (await sb.bwCalls()).filter((c) => c.args[0] === 'get' && c.args.includes('oa1'));
   assert.deepEqual(orgFetches.map((c) => c.args.includes('--organizationid')), [true]);

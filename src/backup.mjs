@@ -40,7 +40,8 @@ async function backupVault(bw, { dir, orgId, includeFiles, label }) {
   await bw.exportVault({ file: path.join(dir, EXPORT_FILE), orgId });
 
   logger.info(`Will list ${label} for further processing`);
-  const items = await bw.listItems({ orgId });
+  // `bw list items` without an org id returns org items too, but a personal export does not contain them.
+  const items = (await bw.listItems({ orgId })).filter((item) => orgId || !item.organizationId);
   await writeJson(path.join(dir, RAW_FILE), items);
 
   if (orgId) {

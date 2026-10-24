@@ -72,8 +72,9 @@ export function createBw({ credentials, appDataDir, bin = process.execPath, binA
     sync: () => run(['sync']),
 
     // Bitwarden re-checks the master password on export, read from stdin.
-    exportVault: ({ file, orgId }) =>
-      run(['export', '--format', 'json', '--output', file, ...orgArgs(orgId)], { input: credentials.masterPassword }),
+    // format 'zip' (personal vault only) bundles the attachments, organizations only support json.
+    exportVault: ({ file, orgId, format = 'json' }) =>
+      run(['export', '--format', format, '--output', file, ...orgArgs(orgId)], { input: credentials.masterPassword }),
 
     listItems: ({ orgId } = {}) => json(['list', 'items', ...orgArgs(orgId)]),
     listFolders: () => json(['list', 'folders']),

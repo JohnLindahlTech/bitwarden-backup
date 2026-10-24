@@ -27,7 +27,8 @@ switch (args[0]) {
     if (args[1] === 'items') {
       out(orgId
         ? [{ id: 'oi1', name: 'Org item', attachments: [{ id: 'oa1', fileName: 'a.txt' }, { id: 'oa2', fileName: 'b.txt' }] }]
-        : [{ id: 'pi1', name: 'Personal item', attachments: [{ id: 'pa1', fileName: 'p.txt' }] }, { id: 'pi2', name: 'No files' }]);
+        : [{ id: 'xi1', name: 'Org item seen via personal list', organizationId: 'org-1', attachments: [{ id: 'xa1', fileName: 'x.txt' }] },
+           { id: 'pi1', name: 'Personal item', attachments: [{ id: 'pa1', fileName: 'p.txt' }] }, { id: 'pi2', name: 'No files' }]);
     }
     if (args[1] === 'folders') out([{ id: 'f1', name: 'Folder' }]);
     if (args[1] === 'organizations') out([{ id: 'org-1', name: 'My Org' }]);
