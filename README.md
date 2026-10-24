@@ -64,7 +64,14 @@ docker run --rm -v /path/to/creds.json:/run/secrets/bwbu.json:ro -v /tmp/backup:
 
 Optional env vars: `BWBU_INCLUDE_PERSONAL`, `BWBU_INCLUDE_ORG`, `BWBU_INCLUDE_FILES` (all default `true`), `LOG_LEVEL`.
 
-Note: `bw export --format zip` does not support organizations, which is why attachments are fetched one by one.
+### Why not Bitwarden's native zip export?
+
+Attachments are fetched one by one (`bw get attachment`, sequentially) instead of using `bw export --format zip`:
+
+* The zip export is refused for organizations ("Zip export not supported for organization").
+* Its layout is keyed by item name (`attachments/<item name>/...`). Bitwarden allows several items with the same name, so those could collide or get mixed up. Our layout is `attachments/<item name>/<item id>/<attachment id>/`, which cannot collide.
+* For the personal vault the zip was complete in testing and faster (about 7-14s vs about 4s per attachment), but one code path for personal and org vaults is easier to trust and to restore from.
+* `bw list items` also returns organization items, so the personal backup filters those out to avoid backing them up twice.
 
 A hardened Compose example (secret mount, read-only root fs, RAM-only temp dir, cron line) is in [`compose.example.yaml`](compose.example.yaml).
 
