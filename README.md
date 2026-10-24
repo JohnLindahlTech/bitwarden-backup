@@ -27,6 +27,14 @@ All secrets live in one JSON file. Pass its path with `--credentials-file` (`-c`
 | `masterPassword` | backup | Your Bitwarden master password. Bitwarden requires it for unlock and export. |
 | `passphrase` | backup and unpack | You choose it. Encrypts the 7z archive, so make it long and random (`openssl rand -base64 32`) and store it away from the backups. |
 
+### Getting the API key
+
+1. Open the Bitwarden web vault and go to **Settings -> Security -> Keys**.
+2. Click **View API key** and enter your master password.
+3. Copy `client_id` (looks like `user.xxxxxxxx-...`, never changes) into `clientId` and `client_secret` into `clientSecret`. Ignore `scope` and `grant_type`.
+
+Use this personal key. Organization API keys (`organization.` prefix) are for the Public API and cannot unlock your vault. **Rotate API key** on the same page only changes `client_secret`, the old one stops working immediately, so update the credentials file afterwards.
+
 API key login skips MFA, and unlock only needs the master password, so unattended runs work with MFA enabled. `unpack` only reads `passphrase`, the other fields may be absent there.
 
 ### Handling rules the tool enforces
