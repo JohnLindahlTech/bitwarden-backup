@@ -23,7 +23,7 @@ try {
     })
     .command(
       ['backup', '$0'],
-      'Backup a bitwarden vault, with organization and file attachments, into an encrypted 7z backup file.',
+      'Backup a bitwarden vault, with organization and file attachments, into a single encrypted 7z file.',
       {
         backupDir: { alias: 'b', describe: 'Target directory for the encrypted backup.', default: '/tmp/bwbu/target' },
         tempDir: { alias: 'd', describe: 'Temporary directory for storing the data while working', default: '/tmp/bwbu/ws' },
@@ -31,8 +31,7 @@ try {
         includePersonal: bool('Indicate if personal vault should be backed up.'),
         includeOrg: bool('Indicate if organization vault(s) should be backed up.', true, { alias: 'o' }),
         includeFiles: bool('Indicate if attachments files should be backed up.', true, { alias: 'f' }),
-        archive: bool('Indicate if target archive should be created. Used only for debugging.'),
-        encrypt: bool('Indicate if target archive should be encrypted, implies archive. Used only for debugging.'),
+        encrypt: bool('Indicate if the encrypted archive should be created. Disable only for debugging, the plaintext stays in tempDir.'),
         cleanUp: bool('Indicate if temp directory should be removed after a job well done. Used only for debugging.'),
       },
       backup,
@@ -41,7 +40,7 @@ try {
       'unpack',
       'Decrypts and unpacks a backup into a new sub directory of the unpack dir.',
       {
-        sourceFile: { required: true, describe: 'Source .tar.gz.7z file with the backup.' },
+        sourceFile: { required: true, describe: 'Source .7z file with the backup.' },
         unpackDir: { alias: 'u', describe: 'Directory to unpack into.', default: '/tmp/bwbu/unpack' },
       },
       unpack,
@@ -49,10 +48,13 @@ try {
     .command(
       'restore',
       'Restores a backup into a bitwarden account. (Not implemented)',
-      { sourceFile: { required: true, describe: 'Source .tar.gz.7z file with the backup.' } },
+      { sourceFile: { required: true, describe: 'Source .7z file with the backup.' } },
       restore,
     )
-    .strict()
+    // Not .strict(): the image sets env vars for every command (BWBU_SOURCE_FILE etc.), which would be
+    // rejected as unknown arguments by the other commands.
+    .strictCommands()
+    .fail(false) // let errors reach the catch below: one log line, no help dump or stack trace
     .parseAsync();
 } catch (err) {
   logger.error(err.message);

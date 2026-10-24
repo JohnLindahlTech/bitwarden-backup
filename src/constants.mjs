@@ -9,8 +9,7 @@ export const ATTACHMENTS='attachments';
 export const PERSONAL='personal';
 export const ORGANIZATION='org';
 export const TARGET_FILE_PREFIX = 'bw-backup';
-export const TAR_FILE_EXTENSION = '.tar.gz';
-export const ENCRYPT_FILE_EXTENSION = '.7z';
+export const ARCHIVE_FILE_EXTENSION = '.7z';
 
 export const PERSONAL_ATTACHMENTS_DIR=path.join(PERSONAL, ATTACHMENTS);
 export const ORG_ATTACHMENTS_DIR=path.join(ORGANIZATION, ATTACHMENTS);

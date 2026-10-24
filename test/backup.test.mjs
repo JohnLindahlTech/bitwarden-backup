@@ -8,7 +8,7 @@ import { exists, makeSandbox } from '../testing/helpers.mjs';
 
 test('backs up personal and org vaults including org attachments', async () => {
   const sb = await makeSandbox();
-  const argv = sb.argv({ archive: false, encrypt: false, cleanUp: false });
+  const argv = sb.argv({ encrypt: false, cleanUp: false });
   await backup(argv, sb.deps);
 
   const read = (...p) => fs.readFile(path.join(argv.tempDir, ...p), 'utf8');
@@ -28,7 +28,7 @@ test('backs up personal and org vaults including org attachments', async () => {
 test('a failed attachment does not stop the others but fails the backup', async () => {
   const sb = await makeSandbox();
   process.env.FAKE_BW_FAIL_FILE = 'oa1';
-  const argv = sb.argv({ archive: false, encrypt: false, cleanUp: false });
+  const argv = sb.argv({ encrypt: false, cleanUp: false });
   await assert.rejects(backup(argv, sb.deps), /1 of 2 attachment\(s\) failed.*oi1\/oa1/);
   assert.ok(await exists(path.join(argv.tempDir, 'org', 'My Org', 'attachments', 'Org item', 'oi1', 'oa2', 'file.txt')));
   await sb.cleanup();
@@ -64,7 +64,8 @@ test('encrypted backup round-trips through unpack', async () => {
   const argv = sb.argv();
   await backup(argv, sb.deps);
   const [file] = await fs.readdir(argv.backupDir);
-  assert.match(file, /^bw-backup-.*\.tar\.gz\.7z$/); // unencrypted .tar.gz was removed
+  assert.match(file, /^bw-backup-.*\.7z$/);
+  assert.equal((await fs.readdir(argv.backupDir)).length, 1); // a single file, nothing else left behind
 
   const unpackDir = path.join(sb.dir, 'unpacked');
   await unpack({ credentialsFile: sb.credentialsFile, sourceFile: path.join(argv.backupDir, file), unpackDir }, sb.deps);
@@ -80,7 +81,7 @@ test('unpack refuses a non-empty target and removes its dir on a wrong passphras
   const [file] = await fs.readdir(argv.backupDir);
   const sourceFile = path.join(argv.backupDir, file);
   const unpackDir = path.join(sb.dir, 'unpacked');
-  const target = path.join(unpackDir, file.replace(/\.tar\.gz\.7z$/, ''));
+  const target = path.join(unpackDir, file.replace(/\.7z$/, ''));
 
   await fs.mkdir(target, { recursive: true });
   await fs.writeFile(path.join(target, 'precious'), 'x');
@@ -91,5 +92,36 @@ test('unpack refuses a non-empty target and removes its dir on a wrong passphras
   process.env.FAKE_7Z_PASSPHRASE = 'other';
   await assert.rejects(unpack({ credentialsFile: sb.credentialsFile, sourceFile, unpackDir }, sb.deps), /Could not unpack/);
   assert.equal(await exists(target), false);
+  await sb.cleanup();
+});
+
+test('no partial archive is left behind when archiving fails', async () => {
+  const sb = await makeSandbox();
+  process.env.FAKE_7Z_PASSPHRASE = 'something-else'; // fake 7z rejects the real passphrase
+  const argv = sb.argv();
+  await assert.rejects(backup(argv, sb.deps));
+  assert.deepEqual(await fs.readdir(argv.backupDir).catch(() => []), []);
+  await sb.cleanup();
+});
+
+test('unpack hints at legacy .tar.gz archives', async () => {
+  const sb = await makeSandbox();
+  const src = path.join(sb.dir, 'legacy-src');
+  await fs.mkdir(src);
+  await fs.writeFile(path.join(src, 'bw-backup-old.tar.gz'), 'x');
+  const sourceFile = path.join(sb.dir, 'bw-backup-old.7z');
+  const { createArchive } = await import('../src/archive.mjs');
+  await createArchive({ source: src, target: sourceFile, passphrase: 'archive-pass' }, { sevenZipBin: sb.deps.sevenZipBin });
+  const warnings = [];
+  const orig = console.warn;
+  console.warn = (...a) => warnings.push(a.join(' '));
+  process.env.LOG_LEVEL = 'warn';
+  try {
+    await unpack({ credentialsFile: sb.credentialsFile, sourceFile, unpackDir: path.join(sb.dir, 'u') }, sb.deps);
+  } finally {
+    console.warn = orig;
+    process.env.LOG_LEVEL = 'error';
+  }
+  assert.match(warnings.join('\n'), /Legacy backup.*tar -xzf bw-backup-old\.tar\.gz/);
   await sb.cleanup();
 });

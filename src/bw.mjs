@@ -3,21 +3,22 @@ import { fileURLToPath } from 'node:url';
 import { redactor } from './credentials.mjs';
 import logger from './log.mjs';
 
-const DEFAULT_BIN = fileURLToPath(new URL('../node_modules/.bin/bw', import.meta.url));
+// Run bw's JS entrypoint with the current node, so no shell, `env` or PATH lookup is needed.
+const BW_SCRIPT = fileURLToPath(new URL('../node_modules/@bitwarden/cli/build/bw.js', import.meta.url));
 const ALREADY_LOGGED_IN_REGEX = /You are already logged in as/;
 
 /**
  * Thin wrapper around the `bw` CLI. Secrets only travel via the child's env or stdin,
  * never argv. Errors are redacted, and stdout (the vault!) is never logged.
  */
-export function createBw({ credentials, appDataDir, bin = DEFAULT_BIN }) {
+export function createBw({ credentials, appDataDir, bin = process.execPath, binArgs = bin === process.execPath ? [BW_SCRIPT] : [] }) {
   let session;
   let redact = redactor(credentials);
 
   async function run(args, { input, env } = {}) {
     logger.debug(`bw ${args.slice(0, 2).join(' ')}`);
     try {
-      const { stdout } = await execa(bin, args, {
+      const { stdout } = await execa(bin, [...binArgs, ...args], {
         env: {
           ...(appDataDir && { BITWARDENCLI_APPDATA_DIR: appDataDir }),
           BW_CLIENTID: credentials.clientId,

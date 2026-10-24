@@ -3,10 +3,10 @@ import os from 'node:os';
 import path from 'node:path';
 import filenamify from 'filenamify';
 import { createBw } from './bw.mjs';
-import { ATTACHMENTS, COLLECTIONS_FILE, EXPORT_FILE, FOLDERS_FILE, LIST_FILE, ORGANIZATION, PERSONAL, RAW_FILE, TARGET_FILE_PREFIX, TAR_FILE_EXTENSION } from './constants.mjs';
+import { ATTACHMENTS, COLLECTIONS_FILE, EXPORT_FILE, FOLDERS_FILE, LIST_FILE, ORGANIZATION, PERSONAL, RAW_FILE, TARGET_FILE_PREFIX, ARCHIVE_FILE_EXTENSION } from './constants.mjs';
 import { loadCredentials } from './credentials.mjs';
 import logger from './log.mjs';
-import { encrypt, tar } from './tar.mjs';
+import { createArchive } from './archive.mjs';
 
 const writeJson = (file, data) => fs.writeFile(file, JSON.stringify(data, null, 2));
 
@@ -69,7 +69,7 @@ async function backupOrganizations(bw, argv) {
   }
 }
 
-export async function backup(argv, { bwBin, tarBin, sevenZipBin } = {}) {
+export async function backup(argv, { bwBin, bwBinArgs, sevenZipBin } = {}) {
   const needsBw = argv.includePersonal || argv.includeOrg;
   const credentials = await loadCredentials(argv.credentialsFile, [
     ...(needsBw ? ['clientId', 'clientSecret', 'masterPassword'] : []),
@@ -77,16 +77,17 @@ export async function backup(argv, { bwBin, tarBin, sevenZipBin } = {}) {
   ]);
 
   const stamp = new Date().toISOString().replaceAll(/[.:]/g, '-');
-  const targetFile = path.join(argv.backupDir, `${TARGET_FILE_PREFIX}-${stamp}${TAR_FILE_EXTENSION}`);
+  const targetFile = path.join(argv.backupDir, `${TARGET_FILE_PREFIX}-${stamp}${ARCHIVE_FILE_EXTENSION}`);
   const bwHome = await fs.mkdtemp(path.join(os.tmpdir(), 'bwbu-bw-')); // isolated bw login state
-  const bw = createBw({ credentials, appDataDir: bwHome, bin: bwBin });
-  let encrypted = false;
+  const bw = createBw({ credentials, appDataDir: bwHome, bin: bwBin, binArgs: bwBinArgs });
+  let archived = false;
 
   try {
     if (argv.ensureFresh) {
       logger.info(`Will now remove: ${argv.tempDir}`);
       await fs.rm(argv.tempDir, { recursive: true, force: true });
     }
+    await fs.mkdir(argv.tempDir, { recursive: true });
 
     if (needsBw) {
       logger.info('Will log into, unlock and sync BW.');
@@ -109,16 +110,13 @@ export async function backup(argv, { bwBin, tarBin, sevenZipBin } = {}) {
       logger.info('Did not export Organization vaults, as it was not requested.');
     }
 
-    if (argv.archive || argv.encrypt) {
-      logger.info(`Will archive to: ${targetFile}`);
-      await fs.mkdir(argv.backupDir, { recursive: true });
-      await tar(targetFile, argv.tempDir, { tarBin });
-    }
-
     if (argv.encrypt) {
-      logger.info(`Will encrypt archive to: ${targetFile}.7z`);
-      await encrypt(targetFile, credentials.passphrase, { sevenZipBin });
-      encrypted = true;
+      logger.info(`Will create encrypted archive: ${targetFile}`);
+      await fs.mkdir(argv.backupDir, { recursive: true });
+      await createArchive({ source: argv.tempDir, target: targetFile, passphrase: credentials.passphrase }, { sevenZipBin });
+      archived = true;
+    } else {
+      logger.info('Did not create the encrypted archive, as it was not requested.');
     }
     logger.info('DONE!');
   } finally {
@@ -127,11 +125,11 @@ export async function backup(argv, { bwBin, tarBin, sevenZipBin } = {}) {
     }
     await fs.rm(bwHome, { recursive: true, force: true });
 
+    if (!archived) {
+      await fs.rm(targetFile, { force: true }).catch(() => {}); // never leave a partial archive behind
+    }
+
     if (argv.cleanUp) {
-      if (encrypted) {
-        logger.info(`Will remove unencrypted archive: ${targetFile}`);
-        await fs.rm(targetFile, { force: true }).catch((err) => logger.error(err.message));
-      }
       logger.info(`Will clean up temp directory: ${argv.tempDir}`);
       await fs.rm(argv.tempDir, { recursive: true, force: true }).catch((err) => logger.error(err.message));
     } else {

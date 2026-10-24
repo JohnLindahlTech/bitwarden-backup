@@ -27,7 +27,7 @@ export async function makeSandbox() {
     argv: (overrides = {}) => ({
       credentialsFile, backupDir: path.join(dir, 'target'), tempDir: path.join(dir, 'ws'),
       ensureFresh: true, includePersonal: true, includeOrg: true, includeFiles: true,
-      archive: true, encrypt: true, cleanUp: true, ...overrides,
+      encrypt: true, cleanUp: true, ...overrides,
     }),
     deps: { bwBin: FAKE_BW, sevenZipBin: FAKE_7Z },
     cleanup: () => fs.rm(dir, { recursive: true, force: true }),
