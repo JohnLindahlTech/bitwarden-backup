@@ -161,6 +161,8 @@ Do not pass the passphrase with `-p<passphrase>`, it ends up in shell history an
 
 ## Limitations
 
+- Only organizations you can export (owner/admin, confirmed membership, enabled) are backed up. Others are **skipped with a warning** per organization and a summary before `DONE!`, listed in `org/skipped.json` inside the archive, and the backup still succeeds. An export that fails for an organization you may export fails the whole backup.
+- Organization members, roles, groups, per-collection permissions and policies are not part of the export.
 - Attachments are downloaded one at a time (about 4 seconds each), by design, see above.
 - There is no incremental backup, every run creates a complete new archive. Prune old ones yourself.
 - Restore is not implemented. The plaintext JSON inside the archive can be imported into Bitwarden or Vaultwarden by hand, but attachments are not restored by that import.

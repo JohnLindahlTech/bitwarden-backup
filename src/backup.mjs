@@ -3,7 +3,7 @@ import os from 'node:os';
 import path from 'node:path';
 import filenamify from 'filenamify';
 import { createBw } from './bw.mjs';
-import { ATTACHMENTS, COLLECTIONS_FILE, EXPORT_FILE, FOLDERS_FILE, LIST_FILE, ORGANIZATION, PERSONAL, RAW_FILE, TARGET_FILE_PREFIX, ARCHIVE_FILE_EXTENSION } from './constants.mjs';
+import { ATTACHMENTS, COLLECTIONS_FILE, EXPORT_FILE, FOLDERS_FILE, LIST_FILE, SKIPPED_FILE, ORGANIZATION, PERSONAL, RAW_FILE, TARGET_FILE_PREFIX, ARCHIVE_FILE_EXTENSION } from './constants.mjs';
 import { loadCredentials } from './credentials.mjs';
 import logger from './log.mjs';
 import { createArchive } from './archive.mjs';
@@ -58,6 +58,15 @@ async function backupVault(bw, { dir, orgId, includeFiles, label }) {
   }
 }
 
+// Why we cannot export this organization (undefined when we can). Types: 0 owner, 1 admin, 2 user.
+function exportBlocker(org) {
+  if (org.enabled === false) return 'the organization is disabled';
+  if (org.status !== undefined && org.status !== 2) return 'your membership is not confirmed yet';
+  const canExport = org.permissions?.accessImportExport ?? (org.type === 0 || org.type === 1);
+  if (!canExport) return 'you are not an owner/admin of the organization (no export permission)';
+}
+
+// Returns the organizations that were skipped, never silently.
 async function backupOrganizations(bw, argv) {
   const orgDir = path.join(argv.tempDir, ORGANIZATION);
   await fs.mkdir(orgDir, { recursive: true });
@@ -65,9 +74,18 @@ async function backupOrganizations(bw, argv) {
   logger.info('Will get Org info');
   const orgs = await bw.listOrgs();
   await writeJson(path.join(orgDir, LIST_FILE), orgs);
+  const skipped = [];
   for (const org of orgs) {
+    const reason = exportBlocker(org);
+    if (reason) {
+      logger.warn(`Skipping org (${org.name}), NOT backed up: ${reason}.`);
+      skipped.push({ id: org.id, name: org.name, reason });
+      continue;
+    }
     await backupVault(bw, { dir: path.join(orgDir, filenamify(org.name), filenamify(org.id)), orgId: org.id, includeFiles: argv.includeFiles, label: `org (${org.name})` });
   }
+  await writeJson(path.join(orgDir, SKIPPED_FILE), skipped);
+  return skipped;
 }
 
 export async function backup(argv, { bwBin, bwBinArgs, sevenZipBin } = {}) {
@@ -82,6 +100,7 @@ export async function backup(argv, { bwBin, bwBinArgs, sevenZipBin } = {}) {
   const bwHome = await fs.mkdtemp(path.join(os.tmpdir(), 'bwbu-bw-')); // isolated bw login state
   const bw = createBw({ credentials, appDataDir: bwHome, bin: bwBin, binArgs: bwBinArgs });
   let archived = false;
+  let skippedOrgs = [];
 
   try {
     if (argv.ensureFresh) {
@@ -106,7 +125,7 @@ export async function backup(argv, { bwBin, bwBinArgs, sevenZipBin } = {}) {
     }
 
     if (argv.includeOrg) {
-      await backupOrganizations(bw, argv);
+      skippedOrgs = await backupOrganizations(bw, argv);
     } else {
       logger.info('Did not export Organization vaults, as it was not requested.');
     }
@@ -118,6 +137,9 @@ export async function backup(argv, { bwBin, bwBinArgs, sevenZipBin } = {}) {
       archived = true;
     } else {
       logger.info('Did not create the encrypted archive, as it was not requested.');
+    }
+    if (skippedOrgs.length > 0) {
+      logger.warn(`WARNING: ${skippedOrgs.length} organization(s) were NOT backed up: ${skippedOrgs.map((o) => `${o.name} (${o.reason})`).join('; ')}`);
     }
     logger.info('DONE!');
   } finally {

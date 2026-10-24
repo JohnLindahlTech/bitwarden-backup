@@ -4,6 +4,7 @@ export const EXPORT_FILE="export.json";
 export const RAW_FILE="items.json";
 export const LIST_FILE="list.json";
 export const FOLDERS_FILE="folders.json";
+export const SKIPPED_FILE="skipped.json";
 export const COLLECTIONS_FILE="collections.json";
 export const ATTACHMENTS='attachments';
 export const PERSONAL='personal';

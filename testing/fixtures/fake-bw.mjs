@@ -32,7 +32,16 @@ switch (args[0]) {
            { id: 'pi1', name: 'Personal item', attachments: [{ id: 'pa1', fileName: 'p.txt' }] }, { id: 'pi2', name: 'No files' }]);
     }
     if (args[1] === 'folders') out([{ id: 'f1', name: 'Folder' }]);
-    if (args[1] === 'organizations') out([{ id: 'org-1', name: 'My Org' }]);
+    if (args[1] === 'organizations') {
+      out([
+        { id: 'org-1', name: 'My Org', type: 0, status: 2, enabled: true, permissions: { accessImportExport: true } },
+        ...(process.env.FAKE_BW_EXTRA_ORGS ? [
+          { id: 'org-2', name: 'Member Org', type: 2, status: 2, enabled: true, permissions: { accessImportExport: false } },
+          { id: 'org-3', name: 'Invited Org', type: 2, status: 0, enabled: true },
+          { id: 'org-4', name: 'Disabled Org', type: 0, status: 2, enabled: false },
+        ] : []),
+      ]);
+    }
     if (args[1] === 'org-collections') out([{ id: 'c1', name: 'Collection' }]);
     break;
   case 'get': {
