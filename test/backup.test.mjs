@@ -14,10 +14,10 @@ test('backs up personal and org vaults including org attachments', async () => {
   const read = (...p) => fs.readFile(path.join(argv.tempDir, ...p), 'utf8');
   assert.equal(JSON.parse(await read('personal', 'export.json')).orgId, null);
   assert.equal(await read('personal', 'attachments', 'Personal item', 'pi1', 'pa1', 'file.txt'), 'content of pa1');
-  assert.equal(JSON.parse(await read('org', 'My Org', 'export.json')).orgId, 'org-1');
-  assert.equal(await read('org', 'My Org', 'attachments', 'Org item', 'oi1', 'oa2', 'file.txt'), 'content of oa2');
+  assert.equal(JSON.parse(await read('org', 'My Org', 'org-1', 'export.json')).orgId, 'org-1');
+  assert.equal(await read('org', 'My Org', 'org-1', 'attachments', 'Org item', 'oi1', 'oa2', 'file.txt'), 'content of oa2');
   assert.ok(await exists(path.join(argv.tempDir, 'personal', 'folders.json')));
-  assert.ok(await exists(path.join(argv.tempDir, 'org', 'My Org', 'collections.json')));
+  assert.ok(await exists(path.join(argv.tempDir, 'org', 'My Org', 'org-1', 'collections.json')));
 
   // Regression: `bw list items` also returns org items, they belong in org/ only, not in personal/.
   const personalItems = JSON.parse(await read('personal', 'items.json'));
@@ -36,7 +36,7 @@ test('a failed attachment does not stop the others but fails the backup', async 
   process.env.FAKE_BW_FAIL_FILE = 'oa1';
   const argv = sb.argv({ encrypt: false, cleanUp: false });
   await assert.rejects(backup(argv, sb.deps), /1 of 2 attachment\(s\) failed.*oi1\/oa1/);
-  assert.ok(await exists(path.join(argv.tempDir, 'org', 'My Org', 'attachments', 'Org item', 'oi1', 'oa2', 'file.txt')));
+  assert.ok(await exists(path.join(argv.tempDir, 'org', 'My Org', 'org-1', 'attachments', 'Org item', 'oi1', 'oa2', 'file.txt')));
   await sb.cleanup();
 });
 
@@ -76,7 +76,7 @@ test('encrypted backup round-trips through unpack', async () => {
   const unpackDir = path.join(sb.dir, 'unpacked');
   await unpack({ credentialsFile: sb.credentialsFile, sourceFile: path.join(argv.backupDir, file), unpackDir }, sb.deps);
   const [name] = await fs.readdir(unpackDir);
-  assert.equal(await fs.readFile(path.join(unpackDir, name, 'org', 'My Org', 'attachments', 'Org item', 'oi1', 'oa1', 'file.txt'), 'utf8'), 'content of oa1');
+  assert.equal(await fs.readFile(path.join(unpackDir, name, 'org', 'My Org', 'org-1', 'attachments', 'Org item', 'oi1', 'oa1', 'file.txt'), 'utf8'), 'content of oa1');
   await sb.cleanup();
 });
 
@@ -154,5 +154,13 @@ test('unpack keeps a pre-existing empty target dir when extraction fails', async
   process.env.FAKE_7Z_PASSPHRASE = 'other';
   await assert.rejects(unpack({ credentialsFile: sb.credentialsFile, sourceFile: path.join(argv.backupDir, file), unpackDir }, sb.deps), /Could not unpack/);
   assert.ok(await exists(target)); // it was there before us, so we leave it
+  await sb.cleanup();
+});
+
+test('org folders are keyed by name and id, so same-named orgs cannot collide', async () => {
+  const sb = await makeSandbox();
+  const argv = sb.argv({ encrypt: false, cleanUp: false, includePersonal: false });
+  await backup(argv, sb.deps);
+  assert.deepEqual(await fs.readdir(path.join(argv.tempDir, 'org', 'My Org')), ['org-1']);
   await sb.cleanup();
 });

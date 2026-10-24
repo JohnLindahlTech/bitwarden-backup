@@ -66,7 +66,7 @@ async function backupOrganizations(bw, argv) {
   const orgs = await bw.listOrgs();
   await writeJson(path.join(orgDir, LIST_FILE), orgs);
   for (const org of orgs) {
-    await backupVault(bw, { dir: path.join(orgDir, filenamify(org.name)), orgId: org.id, includeFiles: argv.includeFiles, label: `org (${org.name})` });
+    await backupVault(bw, { dir: path.join(orgDir, filenamify(org.name), filenamify(org.id)), orgId: org.id, includeFiles: argv.includeFiles, label: `org (${org.name})` });
   }
 }
 

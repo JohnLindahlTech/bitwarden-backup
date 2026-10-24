@@ -64,6 +64,20 @@ docker run --rm -v /path/to/creds.json:/run/secrets/bwbu.json:ro -v /tmp/backup:
 
 Optional env vars: `BWBU_INCLUDE_PERSONAL`, `BWBU_INCLUDE_ORG`, `BWBU_INCLUDE_FILES` (all default `true`), `LOG_LEVEL`.
 
+### Backup layout
+
+```
+personal/
+  export.json  items.json  folders.json
+  attachments/<item name>/<item id>/<attachment id>/<file>
+org/
+  list.json
+  <org name>/<org id>/
+    export.json  items.json  collections.json
+    attachments/<item name>/<item id>/<attachment id>/<file>
+```
+Names make browsing easy, ids make every path unique (Bitwarden allows duplicate item and organization names). Names are sanitized for the file system.
+
 ### Why not Bitwarden's native zip export?
 
 Attachments are fetched one by one (`bw get attachment`, sequentially) instead of using `bw export --format zip`:
