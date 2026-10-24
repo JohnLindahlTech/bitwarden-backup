@@ -33,28 +33,28 @@ name: bwbu
 
 # Shared hardening, applied to both services below.
 x-hardened: &hardened
-  image: johnlindahl/bitwarden-backup:latest   # CHANGE ME: pin a version tag (Renovate can bump it)
-  user: "${BWBU_UID:-1000}:${BWBU_GID:-1000}"   # must match the owner of the credentials file (see setup step 2)
-  read_only: true                    # immutable root filesystem
+  image: johnlindahl/bitwarden-backup:latest # CHANGE ME: pin a version tag (Renovate can bump it)
+  user: "${BWBU_UID:-1000}:${BWBU_GID:-1000}" # must match the owner of the credentials file (see setup step 2)
+  read_only: true # immutable root filesystem
   tmpfs:
     # The working directory holds the plaintext vault export and bw's login state.
     # Keeping /tmp in RAM means plaintext never touches the disk.
-    - /tmp:size=1g,mode=1777         # raise size if your attachments are large
-  cap_drop: [ALL]                    # needs no Linux capabilities
+    - /tmp:size=1g,mode=1777 # raise size if your attachments are large
+  cap_drop: [ALL] # needs no Linux capabilities
   security_opt: [no-new-privileges:true]
-  restart: "no"                      # one-shot job, cron decides when it runs
+  restart: "no" # one-shot job, cron decides when it runs
   secrets: [bwbu_credentials]
   environment:
     BWBU_CREDENTIALS_FILE: /run/secrets/bwbu_credentials
-    LOG_LEVEL: INFO                  # DEBUG logs commands, never vault content or secrets
+    LOG_LEVEL: INFO # DEBUG logs commands, never vault content or secrets
 
 services:
   bwbu:
     <<: *hardened
     command: backup
     volumes:
-      # Encrypted .tar.gz.7z archives end up here.
-      - /srv/bwbu/backup:/backup     # CHANGE ME
+      # One encrypted .7z file per backup ends up here.
+      - /srv/bwbu/backup:/backup # CHANGE ME
     environment:
       BWBU_CREDENTIALS_FILE: /run/secrets/bwbu_credentials
       LOG_LEVEL: INFO
@@ -66,14 +66,14 @@ services:
   unpack:
     <<: *hardened
     command: unpack
-    profiles: [manual]               # never started by a plain `docker compose up`
+    profiles: [manual] # never started by a plain `docker compose up`
     volumes:
-      - /srv/bwbu/backup:/backup:ro  # CHANGE ME (same as above, read-only here)
-      - /srv/bwbu/unpack:/unpack     # CHANGE ME: decrypted, plaintext output! Delete it afterwards
+      - /srv/bwbu/backup:/backup:ro # CHANGE ME (same as above, read-only here)
+      - /srv/bwbu/unpack:/unpack # CHANGE ME: decrypted, plaintext output! Delete it afterwards
     environment:
       BWBU_CREDENTIALS_FILE: /run/secrets/bwbu_credentials
-      BWBU_SOURCE_FILE: /backup/bw-backup-CHANGE-ME.tar.gz.7z
+      BWBU_SOURCE_FILE: /backup/bw-backup-CHANGE-ME.7z
 
 secrets:
   bwbu_credentials:
-    file: /etc/bwbu/credentials.json   # CHANGE ME: see ONE-TIME SETUP
+    file: /etc/bwbu/credentials.json # CHANGE ME: see ONE-TIME SETUP
