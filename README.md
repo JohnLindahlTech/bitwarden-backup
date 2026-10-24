@@ -16,22 +16,29 @@ It supports:
 * Decrypt and unpack a backup archive to gain access to the backed up files.
 
 
-## Credentials
+## Credentials file
 
-Secrets are never passed as flags or env vars. Put them in a JSON file readable only by you (`chmod 600`, the tool refuses anything group/world readable) and point to it with `--credentials-file` / `BWBU_CREDENTIALS_FILE`:
+All secrets live in one JSON file. Pass its path with `--credentials-file` (`-c`) or `BWBU_CREDENTIALS_FILE`. A template is in [`credentials.example.json`](credentials.example.json).
 
-```json
-{
-  "clientId": "user.xxxxxxxx-...",
-  "clientSecret": "...",
-  "masterPassword": "...",
-  "passphrase": "a very long random string used to encrypt the backup"
-}
+| Field | Needed for | Where it comes from |
+|---|---|---|
+| `clientId` | backup | Personal API key: web vault -> Settings -> Security -> Keys -> View API key. Looks like `user.xxxxxxxx-...`. Use the personal key, not an organization API key. |
+| `clientSecret` | backup | Same page as `clientId`. "Rotate API key" there invalidates a leaked key. |
+| `masterPassword` | backup | Your Bitwarden master password. Bitwarden requires it for unlock and export. |
+| `passphrase` | backup and unpack | You choose it. Encrypts the 7z archive, so make it long and random (`openssl rand -base64 32`) and store it away from the backups. |
+
+API key login skips MFA, and unlock only needs the master password, so unattended runs work with MFA enabled. `unpack` only reads `passphrase`, the other fields may be absent there.
+
+### Handling rules the tool enforces
+* The file must not be readable by group or others (`chmod 600`, or `400` in a container). Otherwise the tool refuses to start.
+* Error messages never contain the file's content or its path, and every secret is masked in `bw` errors.
+* Secrets are handed to `bw` and `7z` via environment or stdin, never as command line arguments.
+* Never commit the file. `credentials.json` and `*.credentials.json` are git-ignored as a safety net.
+
+Create it with an editor and a private umask, so secrets stay out of shell history:
+```bash
+umask 077 && ${EDITOR:-nano} /path/to/credentials.json
 ```
-
-* `clientId` / `clientSecret`: your personal API key (web vault -> Settings -> Security -> Keys -> View API key). API key login skips MFA.
-* `masterPassword`: Bitwarden requires it for unlock and export.
-* `passphrase`: encrypts the 7z archive. Keep it somewhere else than the backups.
 
 ## Run
 
@@ -47,6 +54,8 @@ docker run --rm -v /path/to/creds.json:/run/secrets/bwbu.json:ro -v /tmp/backup:
 Optional env vars: `BWBU_INCLUDE_PERSONAL`, `BWBU_INCLUDE_ORG`, `BWBU_INCLUDE_FILES` (all default `true`), `LOG_LEVEL`.
 
 Note: `bw export --format zip` does not support organizations, which is why attachments are fetched one by one.
+
+A hardened Compose example (secret mount, read-only root fs, RAM-only temp dir, cron line) is in [`compose.example.yaml`](compose.example.yaml).
 
 ## Development
 
