@@ -16,6 +16,20 @@ jobs:
       - run: npm ci
       - run: npm test
 
+  # Pull requests: prove the image builds for both CPU types, without pushing anything.
+  image-check:
+    needs: test
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: false
+          platforms: linux/amd64,linux/arm64
+
   build:
     needs: test
     if: github.event_name == 'push'
@@ -48,6 +62,8 @@ jobs:
         with:
           context: .
           push: true
+          # One tag, two architectures: Docker picks the right one (Intel/AMD vs Apple Silicon/ARM).
+          platforms: linux/amd64,linux/arm64
           tags: ${{ steps.meta.outputs.tags }}
       - uses: peter-evans/dockerhub-description@v4
         with:

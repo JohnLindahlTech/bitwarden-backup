@@ -1,7 +1,9 @@
 # syntax=docker/dockerfile:1
 
 # --- build: install production deps and fetch the pinned, statically linked 7-Zip ---
-FROM node:24 AS build
+# Runs on the builder's own CPU even for multi-arch builds (no QEMU emulation): npm ci output is
+# pure JS (no native modules, keep it that way) and the 7-Zip binary is only unpacked here, not run.
+FROM --platform=$BUILDPLATFORM node:24 AS build
 ARG TARGETARCH
 # Official build from https://github.com/ip7z/7zip/releases, checksums verified below.
 # To upgrade, bump the version AND both checksums (sha256 of 7z<version>-linux-<arch>.tar.xz).
