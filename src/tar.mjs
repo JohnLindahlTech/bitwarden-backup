@@ -1,7 +1,8 @@
 import { execa } from 'execa';
 import { ENCRYPT_FILE_EXTENSION } from './constants.mjs';
 
-// The passphrase goes to 7z over stdin (it prompts twice when creating), so it never shows up in `ps`.
+// The passphrase goes to 7z over stdin, so it never shows up in `ps`. When creating, `-p` without a
+// value makes 7z prompt twice. When extracting, 7z prompts by itself, and a bare `-p` would NOT read stdin.
 
 export async function tar(target, source, { tarBin = 'tar' } = {}) {
   await execa(tarBin, ['-czf', target, '-C', source, '.']);
@@ -16,6 +17,6 @@ export async function encrypt(archive, passphrase, { sevenZipBin = '7z' } = {}) 
 
 // Streams 7z -> tar, so no intermediate .tar.gz is written to disk.
 export async function decryptAndUntar({ sourceFile, passphrase, targetDir }, { sevenZipBin = '7z', tarBin = 'tar' } = {}) {
-  const decrypt = execa(sevenZipBin, ['x', '-so', '-p', sourceFile], { input: `${passphrase}\n` });
+  const decrypt = execa(sevenZipBin, ['x', '-so', sourceFile], { input: `${passphrase}\n` });
   await decrypt.pipe(execa(tarBin, ['-xzf', '-', '-C', targetDir]));
 }

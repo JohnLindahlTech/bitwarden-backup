@@ -12,6 +12,7 @@ if (args[0] === 'a') {
   if (stdin !== `${expected}\n${expected}\n`) process.exit(2);
   fs.copyFileSync(args.at(-1), args.at(-2));
 } else if (args[0] === 'x') {
+  if (args.some((a) => a.startsWith('-p'))) { console.error('real 7z ignores stdin when -p is given on extract'); process.exit(3); }
   if (stdin !== `${expected}\n`) { console.error('Wrong password'); process.exit(2); }
   process.stdout.write(fs.readFileSync(args.at(-1)));
 }
