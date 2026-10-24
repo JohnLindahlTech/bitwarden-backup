@@ -18,6 +18,8 @@ It supports:
 - Decrypt and unpack a backup archive to gain access to the backed up files.
 - Runs as a hardened, distroless Docker image for `linux/amd64` and `linux/arm64`.
 
+Scope: an offline backup of your vault in open, portable formats (plain JSON and the original attachment files, inside a standard 7z) that you can read and import without Bitwarden. It does not store Bitwarden's own formats, such as the encrypted JSON export or the CLI's local vault cache, which only work with Bitwarden.
+
 Not implemented yet: restoring a backup into a Bitwarden/Vaultwarden account (see the [Roadmap](#roadmap--todo)).
 
 ## Upgrading from 1.x
@@ -152,7 +154,7 @@ Do not pass the passphrase with `-p<passphrase>`, it ends up in shell history an
 - The archive holds your **whole vault as plaintext JSON** (and the attachments), protected only by the 7z AES-256 passphrase. Make it long and random, and keep a copy somewhere other than the backups, a lost passphrase means unreadable backups.
 - The credentials file contains your master password, API key and that passphrase. It is the most sensitive file in the setup: keep it out of the repo and off the backup storage, private to one uid (`chmod 400`/`600`).
 - Anyone who can start containers on the host (members of the `docker` group, root) can read what the container can read.
-- Store the backups on **encrypted storage** (an encrypted ZFS dataset on TrueNAS, LUKS, an encrypted volume). It does not replace the 7z encryption but adds a layer for everything else on the disk.
+- Store the backups on **encrypted storage** (an encrypted disk or volume). It does not replace the 7z encryption but adds a layer for everything else on the disk.
 - The temp directory is plaintext while a backup runs. The Compose example keeps it in RAM and it is removed afterwards even when the backup fails. If you run without tmpfs, point `BWBU_TEMP_DIR` at encrypted storage.
 - API key login skips MFA, so the API key plus the master password is full access to the vault. Rotate the key in the web vault if the file ever leaks.
 
