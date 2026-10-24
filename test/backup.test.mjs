@@ -53,7 +53,7 @@ test('cleans up temp dir and logs out even when the backup fails', async () => {
 test('bw errors never leak the master password or session key', async () => {
   const sb = await makeSandbox();
   process.env.FAKE_BW_FAIL = 'list';
-  await assert.rejects(backup(sb.argv(), sb.deps), (err) => !/master-pw|SESSIONKEY/.test(err.message));
+  await assert.rejects(backup(sb.argv(), sb.deps), (err) => !/master-pw|SESSIONKEY|SECRETTOKEN/.test(err.message));
   await sb.cleanup();
 });
 

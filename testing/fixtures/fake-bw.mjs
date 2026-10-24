@@ -12,7 +12,7 @@ fs.appendFileSync(process.env.FAKE_BW_LOG, JSON.stringify({ args, session: proce
 const fail = (msg, code = 1) => { process.stderr.write(`${msg}\n`); process.exit(code); };
 const out = (data) => process.stdout.write(typeof data === 'string' ? data : JSON.stringify(data));
 
-if (process.env.FAKE_BW_FAIL === args[0]) fail(`boom, leaked master-pw and SESSIONKEY`);
+if (process.env.FAKE_BW_FAIL === args[0]) fail(`boom, leaked master-pw and SESSIONKEY, FetchError: request to https://x.test/attachments/1/2?token=SECRETTOKEN failed`);
 
 switch (args[0]) {
   case 'config': break;

@@ -30,8 +30,11 @@ export function createBw({ credentials, appDataDir, bin = process.execPath, binA
       });
       return stdout;
     } catch (err) {
-      const stderr = redact(err.stderr ?? '');
-      const firstLine = stderr.split('\n').find(Boolean) ?? redact(err.shortMessage ?? 'unknown error');
+      // Download links carry signed ?token=... query strings, never let those reach logs or errors.
+      const stderr = redact(err.stderr ?? '').replace(/(https?:\/\/[^\s?]+)\?\S*/g, '$1?[query removed]');
+      // bw prints raw stack traces; prefer the line that names the error (FetchError, ECONNREFUSED, ...).
+      const lines = stderr.split('\n').filter(Boolean);
+      const firstLine = lines.find((l) => /^\s*\w*Error:/.test(l)) ?? lines.find((l) => /\bE[A-Z]{3,}\b|certificate/.test(l)) ?? lines[0] ?? redact(err.shortMessage ?? 'unknown error');
       throw Object.assign(new Error(`bw ${args[0]} failed (exit ${err.exitCode ?? '?'}): ${firstLine.slice(0, 300)}`), { stderr });
     }
   }
