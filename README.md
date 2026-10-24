@@ -16,44 +16,45 @@ It supports:
 * Decrypt and unpack a backup archive to gain access to the backed up files.
 
 
+## Credentials
+
+Secrets are never passed as flags or env vars. Put them in a JSON file readable only by you (`chmod 600`, the tool refuses anything group/world readable) and point to it with `--credentials-file` / `BWBU_CREDENTIALS_FILE`:
+
+```json
+{
+  "clientId": "user.xxxxxxxx-...",
+  "clientSecret": "...",
+  "masterPassword": "...",
+  "passphrase": "a very long random string used to encrypt the backup"
+}
+```
+
+* `clientId` / `clientSecret`: your personal API key (web vault -> Settings -> Security -> Keys -> View API key). API key login skips MFA.
+* `masterPassword`: Bitwarden requires it for unlock and export.
+* `passphrase`: encrypts the 7z archive. Keep it somewhere else than the backups.
+
 ## Run
 
-Content of .env.docker
-```ini
-## Backup
-# The Password to the encryption of the backup, this should be very long.
-BWBU_PASSPHRASE=
-# Bitwarden master password, needed for unlock and export
-BWBU_BW_MASTERPASSWORD=
-# Bitwarden API Key Client Id
-BWBU_BW_CLIENTID=
-# Bitwarden API Key Client Secret
-BWBU_BW_CLIENTSECRET=
-
-# Optional
-# Backup Personal vault, default: true
-BWBU_INCLUDE_PERSONAL=true
-# Backup Organizational vault(s), default: true
-BWBU_INCLUDE_ORG=true
-# Backup file attachments, default: true
-BWBU_INCLUDE_FILES=true
-
-## Unpack
-# Path to the backed up archive, Remember the mappings in docker!
-# Should probably be like: /backup/bw-backup-[DATE].tar.gz.7z
-BWBU_SOURCE_FILE=
-
-```
-
-### Backup
 ```bash
-docker run --rm --env-file .env.docker -v /tmp/backup:/backup johnlindahl/bitwarden-backup
+# Backup
+docker run --rm -v /path/to/creds.json:/run/secrets/bwbu.json:ro -v /tmp/backup:/backup johnlindahl/bitwarden-backup
+
+# Unpack into /unpack/bw-backup-[DATE]/ (refuses to write into a non-empty directory)
+docker run --rm -v /path/to/creds.json:/run/secrets/bwbu.json:ro -v /tmp/backup:/backup -v /tmp/unpack:/unpack \
+  -e BWBU_SOURCE_FILE=/backup/bw-backup-[DATE].tar.gz.7z johnlindahl/bitwarden-backup unpack
 ```
 
-### Unpack a backup file
+Optional env vars: `BWBU_INCLUDE_PERSONAL`, `BWBU_INCLUDE_ORG`, `BWBU_INCLUDE_FILES` (all default `true`), `LOG_LEVEL`.
+
+Note: `bw export --format zip` does not support organizations, which is why attachments are fetched one by one.
+
+## Development
+
 ```bash
-docker run --rm --env-file .env.docker -v /tmp/bwbu/backup:/backup -v /tmp/bwbu/unpack:/unpack johnlindahl/bitwarden-backup unpack
+nvm use && npm ci && npm test
 ```
+
+Tests use fake `bw` and `7z` executables (`testing/fixtures`), no credentials needed.
 
 ## Roadmap / TODO
 * Restore personal vault into a (new) Bitwarden Account from Backup archive.
