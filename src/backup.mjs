@@ -1,142 +1,141 @@
-import { login, exportPersonalVault, exportPersonalFiles, unlock, listPersonalVault, sync, listOrgs, exportOrgVault, listOrgVault, exportOrgFiles, listPersonalFolders, listOrgCollections} from "./bw.mjs";
 import fs from 'node:fs/promises';
+import os from 'node:os';
 import path from 'node:path';
 import filenamify from 'filenamify';
-import { PERSONAL_ATTACHMENTS_DIR, TARGET_FILE_PREFIX, PERSONAL, EXPORT_FILE, RAW_FILE, ORGANIZATION, ATTACHMENTS, TAR_FILE_EXTENSION } from "./constants.mjs";
+import { createBw } from './bw.mjs';
+import { ATTACHMENTS, COLLECTIONS_FILE, EXPORT_FILE, FOLDERS_FILE, LIST_FILE, ORGANIZATION, PERSONAL, RAW_FILE, TARGET_FILE_PREFIX, TAR_FILE_EXTENSION } from './constants.mjs';
+import { loadCredentials } from './credentials.mjs';
 import logger from './log.mjs';
-import { encrypt, tar } from "./tar.mjs";
+import { encrypt, tar } from './tar.mjs';
 
+const writeJson = (file, data) => fs.writeFile(file, JSON.stringify(data, null, 2));
 
-async function personal(argv){
-  logger.info(`Will now create: ${path.join(argv.tempDir, PERSONAL_ATTACHMENTS_DIR)}`);
-  await fs.mkdir(path.join(argv.tempDir, PERSONAL_ATTACHMENTS_DIR), {recursive: true});
+// Downloads every attachment, keeps going on failure, and throws once at the end.
+async function downloadAttachments(bw, items, { dir, orgId }) {
+  const files = items.flatMap((item) =>
+    (item.attachments ?? []).map((a) => ({ itemId: item.id, itemName: item.name, fileId: a.id, fileName: a.fileName })));
+  const failures = [];
+  for (const [index, file] of files.entries()) {
+    logger.info(`Fetching file ${index + 1}/${files.length}`);
+    logger.debug(`Fetching ${file.itemName} - ${file.fileName}`);
+    const output = path.join(dir, filenamify(file.itemName), filenamify(file.itemId), filenamify(file.fileId), '/');
+    try {
+      await fs.mkdir(output, { recursive: true });
+      await bw.getAttachment({ fileId: file.fileId, itemId: file.itemId, orgId, output });
+    } catch (err) {
+      logger.error(`Attachment ${file.fileId} on item ${file.itemId} failed: ${err.message}`);
+      failures.push(`${file.itemId}/${file.fileId}`);
+    }
+  }
+  if (failures.length > 0) {
+    throw new Error(`${failures.length} of ${files.length} attachment(s) failed to download: ${failures.join(', ')}`);
+  }
+}
 
-  logger.info(`Will natively export BW personal vault to: ${path.join(argv.tempDir, PERSONAL, EXPORT_FILE)}`)
-  await exportPersonalVault(argv);
-  
-  logger.info(`Will list BW personal vault for further processing, will save to: ${path.join(argv.tempDir, PERSONAL, RAW_FILE)}`)
-  const vault = await listPersonalVault(argv);
+// Personal vault (no orgId) and organization vaults share the same steps.
+async function backupVault(bw, { dir, orgId, includeFiles, label }) {
+  await fs.mkdir(path.join(dir, ATTACHMENTS), { recursive: true });
 
-  logger.info(`Will store BW personal folders`);
-  const folders = await listPersonalFolders(argv);
-  if(argv.includeFiles){
-    logger.info(`Will export personal attachments`)
-    await exportPersonalFiles(vault, argv)
+  logger.info(`Will natively export ${label} to: ${path.join(dir, EXPORT_FILE)}`);
+  await bw.exportVault({ file: path.join(dir, EXPORT_FILE), orgId });
+
+  logger.info(`Will list ${label} for further processing`);
+  const items = await bw.listItems({ orgId });
+  await writeJson(path.join(dir, RAW_FILE), items);
+
+  if (orgId) {
+    await writeJson(path.join(dir, COLLECTIONS_FILE), await bw.listOrgCollections({ orgId }));
   } else {
-    logger.info(`Did not export personal attachments, as it was not requested.`)
+    await writeJson(path.join(dir, FOLDERS_FILE), await bw.listFolders());
   }
 
-}
-
-async function organization(org, argv){
-  await fs.mkdir(path.join(argv.tempDir, ORGANIZATION, filenamify(org.name), ATTACHMENTS), {recursive: true})
-  await exportOrgVault(org, argv);
-  const vault = await listOrgVault(org, argv);
-  const collections = await listOrgCollections(org, argv);
-  if(argv.includeFiles){
-    logger.info(`Will export org (${org.name}) attachments`)
-    await exportOrgFiles(vault, org, argv);
+  if (includeFiles) {
+    logger.info(`Will export ${label} attachments`);
+    await downloadAttachments(bw, items, { dir: path.join(dir, ATTACHMENTS), orgId });
   } else {
-    logger.info(`Did not export org (${org.name}) attachments, as it was not requested`);
+    logger.info(`Did not export ${label} attachments, as it was not requested.`);
   }
 }
 
-async function organizations(argv){
-  logger.info(`Will now create: ${path.join(argv.tempDir, ORGANIZATION)}`);
-  await fs.mkdir(path.join(argv.tempDir, ORGANIZATION), {recursive: true});
+async function backupOrganizations(bw, argv) {
+  const orgDir = path.join(argv.tempDir, ORGANIZATION);
+  await fs.mkdir(orgDir, { recursive: true });
 
-  logger.info(`Will get Org info`)
-  const orgs = await listOrgs(argv);
-  for(const org of orgs){
-    await organization(org, argv)
+  logger.info('Will get Org info');
+  const orgs = await bw.listOrgs();
+  await writeJson(path.join(orgDir, LIST_FILE), orgs);
+  for (const org of orgs) {
+    await backupVault(bw, { dir: path.join(orgDir, filenamify(org.name)), orgId: org.id, includeFiles: argv.includeFiles, label: `org (${org.name})` });
   }
-
 }
 
+export async function backup(argv, { bwBin, tarBin, sevenZipBin } = {}) {
+  const needsBw = argv.includePersonal || argv.includeOrg;
+  const credentials = await loadCredentials(argv.credentialsFile, [
+    ...(needsBw ? ['clientId', 'clientSecret', 'masterPassword'] : []),
+    ...(argv.encrypt ? ['passphrase'] : []),
+  ]);
 
-export async function backup(argv){
-  let error;
+  const stamp = new Date().toISOString().replaceAll(/[.:]/g, '-');
+  const targetFile = path.join(argv.backupDir, `${TARGET_FILE_PREFIX}-${stamp}${TAR_FILE_EXTENSION}`);
+  const bwHome = await fs.mkdtemp(path.join(os.tmpdir(), 'bwbu-bw-')); // isolated bw login state
+  const bw = createBw({ credentials, appDataDir: bwHome, bin: bwBin });
+  let encrypted = false;
 
-  const time = new Date();
-  const _fileFormatedTime = time.toISOString().replaceAll(/[\.:]/g, '-')
-  const _tFileName = `${TARGET_FILE_PREFIX}-${_fileFormatedTime}${TAR_FILE_EXTENSION}`;
-  const targetFile = path.join(argv.backupDir, _tFileName);
-  try{
-    if(argv.ensureFresh){
+  try {
+    if (argv.ensureFresh) {
       logger.info(`Will now remove: ${argv.tempDir}`);
-      await fs.rm(path.join(argv.tempDir /*, '*' */), {recursive: true, force: true, });
-    } else {
-      logger.info(`Did not clean out temp dir, as it was not requested.`)
-    }
-    if(argv.includePersonal || argv.includeOrg){
-      if(argv.bwSession){
-        logger.info(`Got BW_SESSION token, will not login etc.`);
-      } else {
-        logger.info(`Will log into BW.`)
-        await login(argv);
-      
-        logger.info(`Will unlock BW.`)
-        const sessionToken = await unlock(argv);
-        argv.bwSession = sessionToken;
-      }
-      logger.info(`Will sync BW vault`);
-      await sync(argv);
-    } else {
-      logger.info(`No need to log in, unlock, sync as we will not fetch anything.`)
+      await fs.rm(argv.tempDir, { recursive: true, force: true });
     }
 
-    if(argv.includePersonal){
-      await personal(argv);
+    if (needsBw) {
+      logger.info('Will log into, unlock and sync BW.');
+      await bw.login();
+      await bw.unlock();
+      await bw.sync();
     } else {
-      logger.info(`Did not export Personal vault, as it was not requested.`)
+      logger.info('No need to log in, unlock, sync as we will not fetch anything.');
     }
 
-    if(argv.includeOrg){
-      await organizations(argv);
+    if (argv.includePersonal) {
+      await backupVault(bw, { dir: path.join(argv.tempDir, PERSONAL), includeFiles: argv.includeFiles, label: 'personal vault' });
     } else {
-      logger.info(`Did not export Organization vaults, as it was not requested.`)
+      logger.info('Did not export Personal vault, as it was not requested.');
     }
 
-    if(argv.archive || argv.encrypt){
-      logger.info(`Will archive to: ${targetFile}`)
-      await fs.mkdir(argv.backupDir, {recursive: true})
-      await tar(targetFile, argv.tempDir);
+    if (argv.includeOrg) {
+      await backupOrganizations(bw, argv);
     } else {
-      logger.info(`Did not archive, as it was not requested.`)
+      logger.info('Did not export Organization vaults, as it was not requested.');
     }
 
-    if(argv.encrypt){
+    if (argv.archive || argv.encrypt) {
+      logger.info(`Will archive to: ${targetFile}`);
+      await fs.mkdir(argv.backupDir, { recursive: true });
+      await tar(targetFile, argv.tempDir, { tarBin });
+    }
+
+    if (argv.encrypt) {
       logger.info(`Will encrypt archive to: ${targetFile}.7z`);
-      await encrypt(targetFile, argv);
-    } else {
-      logger.info(`Did not encrypt, as it was not requested`)
+      await encrypt(targetFile, credentials.passphrase, { sevenZipBin });
+      encrypted = true;
     }
-
-  } catch(err){
-    // logger.error(err);
-    error = err;
+    logger.info('DONE!');
   } finally {
-    
-    if(argv.cleanUp){
-      logger.info(`Will remove unencrypted archive: ${targetFile}`);
-      try{
-        await fs.rm(targetFile, {recursive: true, force: true});
-      } catch (err){
-        logger.error(err);
+    if (needsBw) {
+      await bw.logout().catch((err) => logger.error(err.message));
+    }
+    await fs.rm(bwHome, { recursive: true, force: true });
+
+    if (argv.cleanUp) {
+      if (encrypted) {
+        logger.info(`Will remove unencrypted archive: ${targetFile}`);
+        await fs.rm(targetFile, { force: true }).catch((err) => logger.error(err.message));
       }
-      
       logger.info(`Will clean up temp directory: ${argv.tempDir}`);
-      try {
-        await fs.rm(path.join(argv.tempDir /*, '*' */), {recursive: true, force: true});
-      } catch(err){
-        logger.error(err);
-      }
+      await fs.rm(argv.tempDir, { recursive: true, force: true }).catch((err) => logger.error(err.message));
     } else {
-      logger.info(`Will not clean up temp directory, as it was not requested.`)
+      logger.info('Will not clean up temp directory, as it was not requested.');
     }
   }
-  if(error){
-    throw error
-  }
-  logger.info(`DONE!`)
 }

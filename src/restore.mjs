@@ -1,4 +1,3 @@
-
-export async function restore(argv){
-  console.error('TODO IMPLEMENT RESTORE!');
+export async function restore() {
+  throw new Error('restore is not implemented yet.');
 }
