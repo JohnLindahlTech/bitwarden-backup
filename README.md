@@ -167,6 +167,16 @@ Do not pass the passphrase with `-p<passphrase>`, it ends up in shell history an
 - There is no incremental backup, every run creates a complete new archive. Prune old ones yourself.
 - Restore is not implemented. The plaintext JSON inside the archive can be imported into Bitwarden or Vaultwarden by hand, but attachments are not restored by that import.
 
+## Local Vaultwarden playground
+
+For practicing backups (and later restores) without touching a real account: `npm run playground` starts a throwaway Vaultwarden from [`compose.vaultwarden.yaml`](compose.vaultwarden.yaml) and registers two test users. **This is a test environment, not a production-ready Vaultwarden setup**: open signups, no admin panel, no mail, an unpinned image, a throwaway self-signed certificate and data in `./tmp`. Never put real passwords in it.
+
+```bash
+npm run playground                                               # certs, Vaultwarden, users a@test.local and b@test.local
+docker compose -f compose.vaultwarden.yaml run --rm bwbu-test    # back up user a -> ./tmp/backup-test
+```
+The generated credentials (random passwords) are in `tmp/test-vw-a.json` and `tmp/test-vw-b.json`, both git-ignored.
+
 ## Development
 
 ```bash
