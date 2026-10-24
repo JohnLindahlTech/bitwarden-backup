@@ -7,3 +7,6 @@ tmp/
 credentials.json
 *.credentials.json
 compose.yaml
+
+# macOS
+.DS_Store
