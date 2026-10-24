@@ -86,6 +86,11 @@ export function createBw({ credentials, appDataDir, bin = process.execPath, binA
     listOrgs: () => json(['list', 'organizations']),
     listOrgCollections: ({ orgId }) => json(['list', 'org-collections', ...orgArgs(orgId)]),
 
+    // `format` is a bw import format name, 'bitwardenjson' is what our export.json is.
+    importFile: ({ file, format = 'bitwardenjson', orgId }) => run(['import', format, file, ...orgArgs(orgId)]),
+
+    createAttachment: ({ file, itemId }) => run(['create', 'attachment', '--file', file, '--itemid', itemId]),
+
     getAttachment: ({ fileId, itemId, orgId, output }) =>
       run(['get', 'attachment', fileId, '--itemid', itemId, '--output', output, ...orgArgs(orgId)]),
   };

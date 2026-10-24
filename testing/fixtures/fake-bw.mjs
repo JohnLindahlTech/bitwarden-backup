@@ -24,7 +24,22 @@ switch (args[0]) {
     if (stdin() !== 'master-pw') fail('Invalid master password.');
     fs.writeFileSync(flag('--output'), JSON.stringify({ exported: true, orgId: orgId ?? null }));
     break;
+  case 'import': {
+    // restore tests: importing flips the fake target account from before.json to after.json
+    if (!process.env.FAKE_BW_TARGET_DIR) fail('no target configured', 2);
+    fs.writeFileSync(`${process.env.FAKE_BW_TARGET_DIR}/imported`, '1');
+    break;
+  }
+  case 'create':
+    if (args[1] === 'attachment' && process.env.FAKE_BW_FAIL_ATTACH && args.includes(process.env.FAKE_BW_FAIL_ATTACH)) fail('upload failed');
+    break;
   case 'list':
+    if (process.env.FAKE_BW_TARGET_DIR && !orgId && (args[1] === 'items' || args[1] === 'folders')) {
+      const dir = process.env.FAKE_BW_TARGET_DIR;
+      const state = JSON.parse(fs.readFileSync(`${dir}/${fs.existsSync(`${dir}/imported`) ? 'after' : 'before'}.json`, 'utf8'));
+      out(args[1] === 'items' ? state.items : state.folders);
+      break;
+    }
     if (args[1] === 'items') {
       out(orgId
         ? [{ id: 'oi1', name: 'Org item', attachments: [{ id: 'oa1', fileName: 'a.txt' }, { id: 'oa2', fileName: 'b.txt' }] }]

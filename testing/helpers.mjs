@@ -20,6 +20,8 @@ export async function makeSandbox() {
   delete process.env.FAKE_BW_FAIL;
   delete process.env.FAKE_BW_FAIL_FILE;
   delete process.env.FAKE_BW_EXTRA_ORGS;
+  delete process.env.FAKE_BW_TARGET_DIR;
+  delete process.env.FAKE_BW_FAIL_ATTACH;
   const readLog = async (file) => (await fs.readFile(file, 'utf8').catch(() => '')).split('\n').filter(Boolean).map((l) => JSON.parse(l));
   return {
     dir,

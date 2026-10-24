@@ -40,7 +40,7 @@ if (!(await exists(path.join(TLS_DIR, 'vw.crt')))) {
 }
 const caFile = path.join(TLS_DIR, 'ca.crt');
 const client = vwClient({ base: BASE, ca: await fs.readFile(caFile), debug: Boolean(process.env.PLAYGROUND_DEBUG) });
-await fs.mkdir(path.join(ROOT, 'tmp/backup-test'), { recursive: true });
+for (const u of USERS) await fs.mkdir(path.join(ROOT, `tmp/backup-test-${u.key}`), { recursive: true });
 
 // bwbu-test mounts its credentials file as a secret, so it must exist before compose is happy
 if (!(await exists(credsFile(USERS[0])))) await fs.writeFile(credsFile(USERS[0]), '{}', { mode: 0o600 });

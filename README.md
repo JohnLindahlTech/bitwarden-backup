@@ -20,7 +20,7 @@ It supports:
 
 Scope: an offline backup of your vault in open, portable formats (plain JSON and the original attachment files, inside a standard 7z) that you can read and import without Bitwarden. It does not store Bitwarden's own formats, such as the encrypted JSON export or the CLI's local vault cache, which only work with Bitwarden.
 
-Not implemented yet: restoring a backup into a Bitwarden/Vaultwarden account (see the [Roadmap](#roadmap--todo)).
+Restoring the **personal vault** (items, folders and attachments) into a Bitwarden/Vaultwarden account works, see [Restore](#restore). Restoring organizations is not implemented yet (see the [Roadmap](#roadmap--todo)).
 
 ## Upgrading from 1.x
 
@@ -107,6 +107,26 @@ Every option is a flag and an environment variable (`BWBU_` + upper snake case).
 
 The exit code is `0` on success and `1` on any failure (including a single attachment that could not be downloaded), so cron can alert on it.
 
+### Restore
+
+Restores the personal vault of a backup into an **empty** account. The credentials file is the one of the **target** account (`serverUrl` for a self-hosted server), and it needs a `passphrase` only when you give a `.7z` with `--sourceFile` (use the passphrase the backup was made with).
+
+```bash
+# 1. dry run (the default): reads the backup, shows what it holds, changes nothing
+bwbu restore --credentialsFile target.json --sourceFile bw-backup-<time>.7z
+# 2. really restore
+bwbu restore --credentialsFile target.json --sourceFile bw-backup-<time>.7z --apply
+```
+Instead of `--sourceFile` you can point `--sourceDir` at an already unpacked backup. In Docker mount the files as for a backup and run the `restore` command.
+
+How it works and what it protects you from:
+
+- It imports `personal/export.json` with Bitwarden's own import (`bitwardenjson`), then uploads every attachment to the matching new item. Imports give items new ids, so items are matched on type, name, folder, username, URIs and notes.
+- **It never guesses.** Items with attachments that cannot be matched with certainty (for example two identical items) are reported with their old ids and skipped, and the command exits with an error. The files are still in the backup under `personal/attachments/`.
+- Nothing happens without `--apply`, and a target that already has items or folders is refused unless you pass `--allowNonEmpty` (which can create duplicates).
+- A restored item is a new item: Bitwarden's import decides which details survive (for example creation and revision dates may not).
+- Organizations are not restored yet.
+
 ### Backup layout
 
 ```
@@ -165,7 +185,7 @@ Do not pass the passphrase with `-p<passphrase>`, it ends up in shell history an
 - Organization members, roles, groups, per-collection permissions and policies are not part of the export.
 - Attachments are downloaded one at a time (about 4 seconds each), by design, see above.
 - There is no incremental backup, every run creates a complete new archive. Prune old ones yourself.
-- Restore is not implemented. The plaintext JSON inside the archive can be imported into Bitwarden or Vaultwarden by hand, but attachments are not restored by that import.
+- Only the personal vault can be restored so far. For organizations the plaintext JSON in the archive can be imported by hand (attachments are not part of that import).
 
 ## Local Vaultwarden playground
 
@@ -173,8 +193,9 @@ For practicing backups (and later restores) without touching a real account: `np
 
 ```bash
 npm run playground                                               # certs, Vaultwarden, users a@test.local and b@test.local
-docker compose -f compose.vaultwarden.yaml run --rm bwbu-test    # back up user a -> ./tmp/backup-test
+docker compose -f compose.vaultwarden.yaml run --rm bwbu-test    # back up user a -> ./tmp/backup-test-a
 ```
+To try a restore: unpack the backup of `a` into `tmp/restore-source`, then `BWBU_APPLY=true docker compose -f compose.vaultwarden.yaml run --rm restore-test` restores it into the empty `b` (leave out `BWBU_APPLY` for a dry run). `TEST_USER=b docker compose -f compose.vaultwarden.yaml run --rm bwbu-test` backs up `b`, and `node scripts/verify-against-seed.mjs <unpacked dir> --personal-only` checks it against what was seeded.
 The generated credentials (random passwords) are in `tmp/test-vw-a.json` and `tmp/test-vw-b.json`, both git-ignored.
 
 `a@test.local` is seeded with test data: a folder, logins, a note and a card, attachments of different sizes (including a 12 byte one and an item with two), a name with odd characters, an item whose name also exists in an organization, and **two organizations with the same name** (with collections, items and attachments). What exists, with the sha256 of every attachment, is recorded in `tmp/test-vw-a.seed.json`. `b@test.local` stays empty, as a restore target. To check a backup of `a` after unpacking it: `node scripts/verify-against-seed.mjs <unpacked dir>`.
@@ -189,6 +210,6 @@ Tests use fake `bw` and `7z` executables (`testing/fixtures`), no credentials ne
 
 ## Roadmap / TODO
 
-- Restore personal vault into a (new) Bitwarden or Vaultwarden account from a backup archive, including attachments.
+- Restore organization vault(s), including their collections and attachments.
 - Restore organizational vault(s) into a (new) Bitwarden Organization from a backup archive.
 - Verify a backup after it is written (extract it and compare the counts with `items.json`).

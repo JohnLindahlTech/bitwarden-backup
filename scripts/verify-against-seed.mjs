@@ -1,12 +1,13 @@
 #!/usr/bin/env node
 // Compares an UNPACKED backup (a directory containing personal/ and org/) of the seeded test account with
 // tmp/test-vw-a.seed.json: item counts, organization folders by id, and the sha256 of every attachment.
-// Usage: node scripts/verify-against-seed.mjs <unpacked backup dir>
+// Usage: node scripts/verify-against-seed.mjs <unpacked backup dir> [--personal-only]
 import { createHash } from 'node:crypto';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 
-const dir = process.argv[2];
+const personalOnly = process.argv.includes('--personal-only');
+const dir = process.argv.slice(2).find((a) => !a.startsWith('--'));
 if (!dir) { console.error('usage: verify-against-seed.mjs <unpacked backup dir>'); process.exit(2); }
 const manifest = JSON.parse(await fs.readFile(new URL('../tmp/test-vw-a.seed.json', import.meta.url), 'utf8'));
 const read = async (...p) => JSON.parse(await fs.readFile(path.join(dir, ...p), 'utf8'));
@@ -36,6 +37,7 @@ check(sameList(await hashes(path.join(dir, 'personal', 'attachments')), expected
 check((await read('personal', 'folders.json')).some((f) => f.name === 'Playground folder'), 'personal folder present');
 
 // organizations
+if (personalOnly) { console.log(failed ? `\n${failed} check(s) FAILED` : '\nall personal checks passed'); process.exit(failed ? 1 : 0); }
 const orgDirs = {};
 for (const name of await fs.readdir(path.join(dir, 'org')).catch(() => [])) {
   for (const id of await fs.readdir(path.join(dir, 'org', name)).catch(() => [])) orgDirs[id] = path.join(dir, 'org', name, id);

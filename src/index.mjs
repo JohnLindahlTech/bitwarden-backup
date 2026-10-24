@@ -47,8 +47,13 @@ try {
     )
     .command(
       'restore',
-      'Restores a backup into a bitwarden account. (Not implemented)',
-      { sourceFile: { required: true, describe: 'Source .7z file with the backup.' } },
+      'Restores the personal vault of a backup into the (empty) account of the credentials file. Dry run unless --apply.',
+      {
+        sourceDir: { describe: 'An unpacked backup directory (containing personal/).' },
+        sourceFile: { describe: 'A .7z backup. Its passphrase is read from the credentials file.' },
+        apply: bool('Really restore. Without it only a dry run is done.', false),
+        allowNonEmpty: bool('Import even if the target account already has items (can create duplicates).', false),
+      },
       restore,
     )
     // Not .strict(): the image sets env vars for every command (BWBU_SOURCE_FILE etc.), which would be

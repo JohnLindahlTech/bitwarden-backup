@@ -15,7 +15,7 @@
 #   Web vault: https://localhost:8222 (accept the certificate warning, or trust tmp/vw-tls/ca.crt)
 #
 # USE
-#   docker compose -f compose.vaultwarden.yaml run --rm bwbu-test     # backup the test account -> ./tmp/backup-test
+#   docker compose -f compose.vaultwarden.yaml run --rm bwbu-test     # backup test user a -> ./tmp/backup-test-a (TEST_USER=b for b)
 #   docker compose -f compose.vaultwarden.yaml down                   # stop (data stays in ./tmp/vaultwarden)
 #   rm -rf tmp/vaultwarden tmp/backup-test tmp/vw-tls                 # throw everything away
 #
@@ -54,7 +54,7 @@ services:
     command: backup
     secrets: [bwbu_test_credentials]
     volumes:
-      - ./tmp/backup-test:/backup
+      - ./tmp/backup-test-${TEST_USER:-a}:/backup
       - ./tmp/vw-tls/ca.crt:/ssl/ca.crt:ro
     environment:
       BWBU_CREDENTIALS_FILE: /run/secrets/bwbu_test_credentials
@@ -65,6 +65,35 @@ services:
     network_mode: "service:vaultwarden"
     depends_on: [vaultwarden]
 
+  # Restores an unpacked backup into the (empty) test user b. Dry run unless BWBU_APPLY=true.
+  #   BWBU_APPLY=true docker compose -f compose.vaultwarden.yaml run --rm restore-test
+  # The backup to restore is read from ./tmp/restore-source (an unpacked backup, containing personal/).
+  restore-test:
+    build: .
+    image: bwbu:local
+    pull_policy: build
+    user: "${BWBU_UID:-1000}:${BWBU_GID:-1000}"
+    read_only: true
+    tmpfs:
+      - /tmp:size=1g,mode=1777
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    restart: "no"
+    command: restore --sourceDir /source
+    secrets: [bwbu_restore_target]
+    volumes:
+      - ./tmp/restore-source:/source:ro
+      - ./tmp/vw-tls/ca.crt:/ssl/ca.crt:ro
+    environment:
+      BWBU_CREDENTIALS_FILE: /run/secrets/bwbu_restore_target
+      BWBU_APPLY: ${BWBU_APPLY:-false}
+      NODE_EXTRA_CA_CERTS: /ssl/ca.crt
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+    network_mode: "service:vaultwarden"
+    depends_on: [vaultwarden]
+
 secrets:
   bwbu_test_credentials:
-    file: ./tmp/test-vw-a.json
+    file: ./tmp/test-vw-${TEST_USER:-a}.json # TEST_USER=b backs up the restore target instead
+  bwbu_restore_target:
+    file: ./tmp/test-vw-b.json
