@@ -15,6 +15,7 @@ const out = (data) => process.stdout.write(typeof data === 'string' ? data : JSO
 if (process.env.FAKE_BW_FAIL === args[0]) fail(`boom, leaked master-pw and SESSIONKEY`);
 
 switch (args[0]) {
+  case 'config': break;
   case 'login': break;
   case 'logout': break;
   case 'sync': break;

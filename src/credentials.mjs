@@ -2,6 +2,8 @@ import fs from 'node:fs/promises';
 
 // Schema of the credentials file (JSON). Never log values or the file path.
 export const CREDENTIAL_FIELDS = ['clientId', 'clientSecret', 'masterPassword', 'passphrase'];
+// Optional, not a secret: a self-hosted Bitwarden/Vaultwarden server instead of bitwarden.com.
+const OPTIONAL_FIELDS = ['serverUrl'];
 
 export async function loadCredentials(file, required = CREDENTIAL_FIELDS) {
   if (!file) {
@@ -37,11 +39,18 @@ export async function loadCredentials(file, required = CREDENTIAL_FIELDS) {
   if (missing.length > 0) {
     throw new Error(`Credentials file is missing fields: ${missing.join(', ')}`);
   }
-  return Object.fromEntries(CREDENTIAL_FIELDS.filter((f) => f in data).map((f) => [f, data[f]]));
+  if ('serverUrl' in data) {
+    let valid = typeof data.serverUrl === 'string';
+    try { valid &&= ['http:', 'https:'].includes(new URL(data.serverUrl).protocol); } catch { valid = false; }
+    if (!valid) throw new Error('Credentials file field serverUrl must be an http(s) URL.');
+  }
+  return Object.fromEntries([...CREDENTIAL_FIELDS, ...OPTIONAL_FIELDS].filter((f) => f in data).map((f) => [f, data[f]]));
 }
 
 // Returns a function that masks every credential value in a string.
 export function redactor(credentials) {
-  const secrets = Object.values(credentials).filter((v) => typeof v === 'string' && v.length > 0);
+  const secrets = Object.entries(credentials)
+    .filter(([k, v]) => !OPTIONAL_FIELDS.includes(k) && typeof v === 'string' && v.length > 0)
+    .map(([, v]) => v);
   return (text) => secrets.reduce((acc, s) => acc.split(s).join('***'), String(text ?? ''));
 }

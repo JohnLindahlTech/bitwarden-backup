@@ -47,6 +47,7 @@ All secrets live in one JSON file. Pass its path with `--credentials-file` (`-c`
 | `clientId`       | backup            | Personal API key: web vault -> Settings -> Security -> Keys -> View API key. Looks like `user.xxxxxxxx-...`. Use the personal key, not an organization API key. |
 | `clientSecret`   | backup            | Same page as `clientId`. "Rotate API key" there invalidates a leaked key.                                                                                       |
 | `masterPassword` | backup            | Your Bitwarden master password. Bitwarden requires it for unlock and export.                                                                                    |
+| `serverUrl`      | optional          | Only for a self-hosted Bitwarden/Vaultwarden server, e.g. `https://vault.example.com`. Defaults to bitwarden.com. Not a secret.                                |
 | `passphrase`     | backup and unpack | You choose it. Encrypts the 7z archive, so make it long and random (`openssl rand -base64 32`) and store it away from the backups.                              |
 
 ### Getting the API key

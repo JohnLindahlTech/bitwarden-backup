@@ -49,6 +49,8 @@ export function createBw({ credentials, appDataDir, bin = process.execPath, binA
 
   return {
     async login() {
+      // Must happen while logged out; each run starts from a fresh bw state, so it always is.
+      if (credentials.serverUrl) await run(['config', 'server', credentials.serverUrl]);
       try {
         await run(['login', '--apikey']);
       } catch (err) {
