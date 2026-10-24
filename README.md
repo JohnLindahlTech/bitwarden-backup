@@ -30,7 +30,7 @@ All secrets live in one JSON file. Pass its path with `--credentials-file` (`-c`
 API key login skips MFA, and unlock only needs the master password, so unattended runs work with MFA enabled. `unpack` only reads `passphrase`, the other fields may be absent there.
 
 ### Handling rules the tool enforces
-* The file must not be readable by group or others (`chmod 600`, or `400` in a container). Otherwise the tool refuses to start.
+* The file must not be readable by group or others (`chmod 600` or `400`). Otherwise the tool refuses to start. In Docker, run the container as the file's owner (`user:` / `--user "$(id -u):$(id -g)"`) so it can read a private file, see `compose.example.yaml`.
 * Error messages never contain the file's content or its path, and every secret is masked in `bw` errors.
 * Secrets are handed to `bw` and `7z` via environment or stdin, never as command line arguments.
 * Never commit the file. `credentials.json` and `*.credentials.json` are git-ignored as a safety net.

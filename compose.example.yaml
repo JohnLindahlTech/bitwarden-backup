@@ -3,18 +3,21 @@
 #
 # ONE-TIME SETUP (on the Docker host)
 #   1. Create the credentials file OUTSIDE this repo and OUTSIDE the backup volume,
-#      owned by the uid the container runs as (1000 = the image's `node` user),
-#      readable by that user only. Write it with an editor, not `echo`, so the
-#      secrets stay out of your shell history:
-#         sudo install -d -m 700 -o 1000 -g 1000 /etc/bwbu
-#         sudo -u '#1000' sh -c 'umask 077; nano /etc/bwbu/credentials.json'
-#         sudo chmod 400 /etc/bwbu/credentials.json
+#      as the host user that will run the backups, readable by that user only.
+#      Write it with an editor, not `echo`, so the secrets stay out of your shell history:
+#         umask 077 && nano /etc/bwbu/credentials.json     # or chmod 600 afterwards
 #      Schema and where each value comes from: see "Credentials file" in README.md.
 #      All four fields are required for a backup:
 #         { "clientId": "user.xxxxxxxx-...", "clientSecret": "...",
 #           "masterPassword": "...", "passphrase": "long random string" }
-#   2. Keep a copy of the file in your password manager, otherwise a lost host means
-#      undecryptable backups.
+#   2. Tell the container to run as the file's owner, so mode 600 is readable inside.
+#      Put this in a `.env` next to this file (not a secret, but git-ignored anyway):
+#         BWBU_UID=1000      # output of `id -u` for the file owner
+#         BWBU_GID=1000      # output of `id -g`
+#      Defaults to 1000:1000 (the image's `node` user) when unset. Backups written to
+#      /backup are owned by this uid too.
+#   3. Keep a copy of the credentials in your password manager, otherwise a lost host
+#      means undecryptable backups.
 #
 # RUN
 #   docker compose run --rm bwbu                      # backup
@@ -31,7 +34,7 @@ name: bwbu
 # Shared hardening, applied to both services below.
 x-hardened: &hardened
   image: johnlindahl/bitwarden-backup:latest   # CHANGE ME: pin a version tag (Renovate can bump it)
-  user: "1000:1000"                  # must match the owner of the credentials file
+  user: "${BWBU_UID:-1000}:${BWBU_GID:-1000}"   # must match the owner of the credentials file (see setup step 2)
   read_only: true                    # immutable root filesystem
   tmpfs:
     # The working directory holds the plaintext vault export and bw's login state.
