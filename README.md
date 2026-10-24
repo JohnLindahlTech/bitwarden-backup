@@ -177,6 +177,8 @@ docker compose -f compose.vaultwarden.yaml run --rm bwbu-test    # back up user 
 ```
 The generated credentials (random passwords) are in `tmp/test-vw-a.json` and `tmp/test-vw-b.json`, both git-ignored.
 
+`a@test.local` is seeded with test data: a folder, logins, a note and a card, attachments of different sizes (including a 12 byte one and an item with two), a name with odd characters, an item whose name also exists in an organization, and **two organizations with the same name** (with collections, items and attachments). What exists, with the sha256 of every attachment, is recorded in `tmp/test-vw-a.seed.json`. `b@test.local` stays empty, as a restore target. To check a backup of `a` after unpacking it: `node scripts/verify-against-seed.mjs <unpacked dir>`.
+
 ## Development
 
 ```bash
