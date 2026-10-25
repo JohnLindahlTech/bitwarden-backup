@@ -53,10 +53,9 @@ export async function restore(argv, deps = {}) {
     logger.info(`Backup holds ${sourceItems.length} personal items, ${sourceFolders.filter((f) => f.id).length} folders and ${sourceAttachments} attachments.`);
 
     logger.info('Will log into and unlock the TARGET account');
-    await bw.login();
+    await bw.login(); // logging in already syncs the vault
     loggedIn = true;
     await bw.unlock();
-    await bw.sync();
 
     const mine = (items) => items.filter((i) => !i.organizationId);
     const load = async () => {

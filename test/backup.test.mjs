@@ -42,7 +42,7 @@ test('a failed attachment does not stop the others but fails the backup', async 
 
 test('cleans up temp dir and logs out even when the backup fails', async () => {
   const sb = await makeSandbox();
-  process.env.FAKE_BW_FAIL = 'sync';
+  process.env.FAKE_BW_FAIL = 'export';
   const argv = sb.argv();
   await assert.rejects(backup(argv, sb.deps));
   assert.equal(await exists(argv.tempDir), false);

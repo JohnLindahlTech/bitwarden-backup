@@ -110,10 +110,9 @@ export async function backup(argv, { bwBin, bwBinArgs, sevenZipBin } = {}) {
     await fs.mkdir(argv.tempDir, { recursive: true });
 
     if (needsBw) {
-      logger.info('Will log into, unlock and sync BW.');
-      await bw.login();
+      logger.info('Will log into and unlock BW.');
+      await bw.login(); // logging in already syncs the vault
       await bw.unlock();
-      await bw.sync();
     } else {
       logger.info('No need to log in, unlock, sync as we will not fetch anything.');
     }
