@@ -97,6 +97,7 @@ export async function backup(argv, { bwBin, bwBinArgs, sevenZipBin } = {}) {
   const bwHome = await fs.mkdtemp(path.join(os.tmpdir(), 'bwbu-bw-')); // isolated bw login state
   const bw = createBw({ credentials, appDataDir: bwHome, bin: bwBin, binArgs: bwBinArgs });
   let archived = false;
+  let loggedIn = false;
   let skippedOrgs = [];
 
   try {
@@ -109,6 +110,7 @@ export async function backup(argv, { bwBin, bwBinArgs, sevenZipBin } = {}) {
     if (needsBw) {
       logger.info('Will log into and unlock BW.');
       await bw.login(); // logging in already syncs the vault
+      loggedIn = true;
       await bw.unlock();
     } else {
       logger.info('No need to log in, unlock, sync as we will not fetch anything.');
@@ -162,7 +164,7 @@ export async function backup(argv, { bwBin, bwBinArgs, sevenZipBin } = {}) {
     if (failures.length > 0) throw new Error(`Backup finished incompletely: ${failures.join('; ')}.`);
     logger.info('DONE!');
   } finally {
-    if (needsBw) {
+    if (loggedIn) {
       await bw.logout().catch((err) => logger.error(err.message));
     }
     await fs.rm(bwHome, { recursive: true, force: true });

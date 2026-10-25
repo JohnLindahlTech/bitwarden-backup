@@ -33,6 +33,9 @@ services:
       ROCKET_PORT: ${VW_PORT:-8222} # same port inside and outside, so links built from DOMAIN work from bwbu-test too
       ROCKET_TLS: '{certs="/ssl/vw.crt",key="/ssl/vw.key"}' # Vaultwarden serves https itself
       SIGNUPS_ALLOWED: "true" # lets you register test accounts in the browser. Never do this on a real server.
+      # A test server must not rate-limit its own tests: they log in dozens of times in a few minutes.
+      LOGIN_RATELIMIT_SECONDS: "1"
+      LOGIN_RATELIMIT_MAX_BURST: "1000"
       LOG_LEVEL: warn
     ports:
       - "127.0.0.1:${VW_PORT:-8222}:${VW_PORT:-8222}" # localhost only
