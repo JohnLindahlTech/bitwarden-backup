@@ -16,10 +16,9 @@ jobs:
       - run: npm ci
       - run: npm test
 
-  # Pull requests: prove the image builds for both CPU types, without pushing anything.
+  # Always: prove the image builds for both CPU types, without pushing anything.
   image-check:
     needs: test
-    if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -30,8 +29,9 @@ jobs:
           push: false
           platforms: linux/amd64,linux/arm64
 
+  # The only condition in this workflow: publish to Docker Hub only on a push, and pushes only trigger on main.
   build:
-    needs: test
+    needs: [test, image-check]
     if: github.event_name == 'push'
     env:
       IMAGE: johnlindahl/bitwarden-backup
