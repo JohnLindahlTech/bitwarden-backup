@@ -20,7 +20,7 @@ It supports:
 
 Scope: an offline backup of your vault in open, portable formats (plain JSON and the original attachment files, inside a standard 7z) that you can read and import without Bitwarden. It does not store Bitwarden's own formats, such as the encrypted JSON export or the CLI's local vault cache, which only work with Bitwarden.
 
-Mirroring the **personal vault** (items, folders and attachments) into a Bitwarden/Vaultwarden account works and is repeatable, see [Restore (mirror)](#restore-mirror). Organizations are not mirrored yet (see the [Roadmap](#roadmap--todo)).
+Mirroring the **personal vault** and the **organizations** (items, folders or collections, and attachments) into a Bitwarden/Vaultwarden account is repeatable, see [Restore (mirror)](#restore-mirror). The organization part has so far only been tested against a fake `bw`, not yet against a real server (see the [Roadmap](#roadmap--todo)).
 
 ## Upgrading from 1.x
 
@@ -110,7 +110,7 @@ The exit code is `0` on success and `1` on any failure (including a single attac
 
 ### Restore (mirror)
 
-`bwbu restore` (alias `sync`) mirrors the personal vault of a backup into a target account, for example a local Vaultwarden. It is built to run on a schedule against a vault that **already exists**: each run adds what is new, updates what changed and leaves everything else alone.
+`bwbu restore` (alias `sync`) mirrors the personal vault and the organizations of a backup into a target account, for example a local Vaultwarden. It is built to run on a schedule against a vault that **already exists**: each run adds what is new, updates what changed and leaves everything else alone.
 
 **Use the target as a read-only replica.** The data flows one way, from the backup into the target, and the backup is the source of truth. Do your own edits in the source vault, not in the replica: a change made in the replica is not tracked, and it is overwritten when the same item changes in the source.
 
@@ -132,7 +132,7 @@ What a run does:
 | an item that is gone | moved to the target's **trash** (recoverable), never deleted. `--removed keep` leaves it |
 | a gone item that returns | restored from the trash, not duplicated |
 | attachments added or removed | uploaded or removed, exactly those |
-| an empty target | one bulk import, then the attachments |
+| an empty personal vault | one bulk import, then the attachments |
 | items the target already has that this tool did not create | left alone, and counted in the summary |
 
 A failed upload or edit is reported at the end (exit code 1) and retried by the next run, because only what succeeded is recorded. `--force` rewrites all mirrored items.
@@ -145,7 +145,15 @@ A failed upload or edit is reported at the end (exit code 1) and retried by the 
 
 Do not delete these fields. An item without them looks new and is created again (the old one stays, as an item that is not ours). Items are sent to `bw` over stdin, never as command line arguments.
 
-Limits: folders are matched by name and never deleted; passkeys are not restored; creation and revision dates are set by the target; only the personal vault is mirrored so far, organizations are not.
+**Organizations.** The `bw` CLI cannot create an organization, so the target organization must already exist (create it in the web vault). Each backed-up organization is mirrored into one target organization, chosen in this order, and **never guessed**:
+
+1. `--org <backed-up org id>=<target org id>` (repeatable) always wins,
+2. otherwise the target organization that already holds items mirrored from it (the markers above), so later runs need no flags,
+3. otherwise a unique name match (exactly one backed-up and one target organization with that name).
+
+Anything else, for example two organizations with the same name on a first run, is reported as `Organization "<name>" (<id>) was NOT mirrored: <reason>`, with a summary at the end, and the run still succeeds. Add the `--org` flag it asks for. You need to be owner or admin of the target organization. Collections are matched by name and created when missing (never deleted), items are moved between collections when they moved in the source, and attachments, trash and repeat runs behave as for the personal vault. Organization items are created one at a time (about 4 seconds each) and not bulk imported, because Bitwarden's import creates a second collection when one with the same name exists. Use `--no-includeOrg` or `--no-includePersonal` to mirror only one of the two.
+
+Limits: folders are matched by name and never deleted; passkeys are not restored; creation and revision dates are set by the target.
 
 ### Backup layout
 
@@ -205,7 +213,7 @@ Do not pass the passphrase with `-p<passphrase>`, it ends up in shell history an
 - Organization members, roles, groups, per-collection permissions and policies are not part of the export.
 - Attachments are downloaded one at a time (about 4 seconds each), by design, see above.
 - There is no incremental backup, every run creates a complete new archive. Prune old ones yourself.
-- Only the personal vault can be mirrored so far. For organizations the plaintext JSON in the archive can be imported by hand (attachments are not part of that import).
+- Organization mirroring needs the target organization to exist already, and members, roles, groups and collection permissions are not recreated.
 
 ## Local Vaultwarden playground
 
@@ -244,6 +252,5 @@ It needs 7-Zip on the host (`7z`, or `7zz` from `brew install sevenzip`; `BWBU_S
 
 ## Roadmap / TODO
 
-- Mirror organization vault(s), including their collections and attachments.
-- Restore organizational vault(s) into a (new) Bitwarden Organization from a backup archive.
+- Run the organization mirror in the end-to-end tests against a real server (it is covered by unit tests with a fake `bw` only so far).
 - Verify a backup after it is written (extract it and compare the counts with `items.json`).
