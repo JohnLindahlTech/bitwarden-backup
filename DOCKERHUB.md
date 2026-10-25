@@ -95,11 +95,14 @@ docker run --rm \
 - It is a one-way copy: your Bitwarden account is only read, never changed. The second vault is kept up to date on every run, adding new items, updating changed ones and moving removed ones to its trash.
 - Treat that second vault as a read-only replica, and do not edit it by hand.
 - Add `-e BWBU_ARCHIVE=false` to skip the backup file and only keep the copy. Nothing is then written to disk, and no passphrase is needed.
+- Already have a backup file and want to copy it into a vault later? That is the `restore` command, see the [full documentation](https://github.com/JohnLindahlTech/bitwarden-backup#restore-mirror).
 - Organizations must already exist in the second vault. If an organization cannot be matched safely (for example two with the same name), it is skipped with a clear warning and the exact setting to add.
 
 ## Updating from an earlier version (0.x)
 
-Version 1.0 and later no longer take passwords from environment variables (`BWBU_PASSPHRASE`, `BWBU_BW_MASTERPASSWORD`, `BWBU_BW_CLIENTID`, `BWBU_BW_CLIENTSECRET`). Put those four values in the credentials file from step 1 instead. Backups are now named `bw-backup-<time>.7z` and are a single 7-Zip file; organizations are stored in `org/<name>/<id>/`.
+**Your old `docker run` command will not work unchanged.** Version 1.0 no longer takes passwords from environment variables (`BWBU_PASSPHRASE`, `BWBU_BW_MASTERPASSWORD`, `BWBU_BW_CLIENTID`, `BWBU_BW_CLIENTSECRET`): they go into the credentials file from step 1. The container also no longer runs as the `node` user, so add `--user "$(id -u):$(id -g)"`. Backups are now a single `bw-backup-<time>.7z`, and your old `.tar.gz.7z` files still open.
+
+**Step by step, with before and after commands: [Migration guide, 0.x to 1.0](https://github.com/JohnLindahlTech/bitwarden-backup/blob/main/MIGRATION.md)**
 
 ## Good to know
 

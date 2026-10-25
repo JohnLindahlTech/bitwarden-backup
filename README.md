@@ -24,7 +24,7 @@ Mirroring the **personal vault** and the **organizations** (items, folders or co
 
 ## Upgrading from 0.x
 
-The next major release has breaking changes:
+Step by step, with before and after commands: **[MIGRATION.md](MIGRATION.md)**. In short, the next major release has breaking changes:
 
 | Before                                                                                                                | Now                                                                                                                     |
 | --------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------- |
