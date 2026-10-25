@@ -4,6 +4,7 @@ import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { vwClient } from '../scripts/lib/vw-client.mjs';
 
 export const ROOT = fileURLToPath(new URL('..', import.meta.url));
 const BW_SCRIPT = path.join(ROOT, 'node_modules/@bitwarden/cli/build/bw.js');
@@ -60,6 +61,14 @@ export async function backupOf(user, { orgs = true } = {}) {
   return { archive, output };
 }
 
+// Direct mode: backs up `user` and mirrors it straight into `targetUser`, without writing an archive. Host mode only.
+export async function backupDirectly(user, targetUser) {
+  const dir = path.join(ROOT, `tmp/backup-test-${user}`);
+  await fs.rm(dir, { recursive: true, force: true });
+  return host(['backup', '--credentialsFile', creds(user), '--targetCredentialsFile', creds(targetUser), '--no-archive', '--no-includeOrg',
+    '--backupDir', dir, '--tempDir', path.join(ROOT, `tmp/e2e-work-${user}`)]);
+}
+
 // Unpacks it, returns the directory with personal/ and org/.
 export async function unpackOf(user, archive) {
   const unpackDir = path.join(ROOT, `tmp/unpack-test-${user}`);
@@ -69,10 +78,18 @@ export async function unpackOf(user, archive) {
   return path.join(unpackDir, archive.replace(/\.7z$/, ''));
 }
 
-// Mirrors an unpacked backup into test user b, returns the log.
-export const mirrorInto = (sourceDir, env = {}) => MODE === 'container'
-  ? composeOk(['run', '--rm', 'restore-test'], { BWBU_APPLY: 'true', RESTORE_SOURCE: sourceDir, ...env })
-  : host(['restore', '--credentialsFile', creds('b'), '--sourceDir', sourceDir, '--apply']);
+// Mirrors an unpacked backup into test user b, returns the log. Personal vault only unless `orgs` is set,
+// `args` are extra flags such as ['--org', '<source id>=<target id>'] (host mode only).
+export const mirrorInto = (sourceDir, { orgs = false, personal = true, args = [] } = {}) => MODE === 'container'
+  ? composeOk(['run', '--rm', 'restore-test'], { BWBU_APPLY: 'true', RESTORE_SOURCE: sourceDir, BWBU_INCLUDE_ORG: String(orgs), BWBU_INCLUDE_PERSONAL: String(personal) })
+  : host(['restore', '--credentialsFile', creds('b'), '--sourceDir', sourceDir, '--apply', orgs ? '--includeOrg' : '--no-includeOrg', personal ? '--includePersonal' : '--no-includePersonal', ...args]);
+
+// Organizations cannot be created with the bw CLI, so the tests create them through the API (as the seeder does).
+export async function createOrg(user, name) {
+  const c = await credentials(user);
+  const client = vwClient({ base: c.serverUrl, ca: await fs.readFile(CA_FILE) });
+  return client.createOrganization({ email: c.email, password: c.masterPassword }, name);
+}
 
 // Talk to a test account with the real bw CLI, to change or inspect it directly. One logged-in session per user is
 // kept for the whole suite (login and unlock cost ~15 s), each use only syncs first. Call closeBw() at the end.
@@ -91,6 +108,8 @@ async function openBw(user) {
     run,
     json: async (args, input) => JSON.parse(await run(args, { input })),
     items: (opts = {}) => bw.json(['list', 'items', ...(opts.trash ? ['--trash'] : [])]),
+    orgItems: (orgId, opts = {}) => bw.json(['list', 'items', '--organizationid', orgId, ...(opts.trash ? ['--trash'] : [])]),
+    collections: (orgId) => bw.json(['list', 'org-collections', '--organizationid', orgId]),
     edit: (item) => run(['edit', 'item', item.id], { input: enc(item) }),
     create: (item) => bw.json(['create', 'item'], enc(item)),
     attach: async (itemId, fileName, content) => {

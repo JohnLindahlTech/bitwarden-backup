@@ -111,6 +111,8 @@ services:
     environment:
       BWBU_CREDENTIALS_FILE: /run/secrets/bwbu_restore_target
       BWBU_APPLY: ${BWBU_APPLY:-false}
+      BWBU_INCLUDE_PERSONAL: ${BWBU_INCLUDE_PERSONAL:-true}
+      BWBU_INCLUDE_ORG: ${BWBU_INCLUDE_ORG:-true}
       NODE_EXTRA_CA_CERTS: /ssl/ca.crt
       LOG_LEVEL: ${LOG_LEVEL:-INFO}
     network_mode: "service:vaultwarden"
