@@ -2,4 +2,4 @@
 node_modules/
 *.log
 tmp/
-compose.yaml
+compose.yamlcompose.*.yaml

@@ -4,19 +4,28 @@
   "description": "",
   "main": "src/index.mjs",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "node --test \"test/*.test.mjs\"",
+    "playground": "node scripts/playground.mjs",
+    "e2e": "node --test --test-concurrency=1 \"e2e/*.test.mjs\"",
+    "e2e:smoke": "node --test --test-concurrency=1 --test-name-pattern=\"^[123]\\\\.\" \"e2e/*.test.mjs\"",
+    "e2e:image": "E2E_MODE=container node --test --test-concurrency=1 --test-name-pattern=\"^[123]\\\\.\" \"e2e/*.test.mjs\"",
+    "e2e:org": "node --test --test-concurrency=1 --test-name-pattern=\"^(1|8|9|10|11|12)\\\\.\" \"e2e/*.test.mjs\"",
+    "e2e:direct": "node --test --test-concurrency=1 --test-name-pattern=\"^12\\\\.\" \"e2e/*.test.mjs\""
   },
   "bin": {
-    "bwbu": "src/index.js"
+    "bwbu": "src/index.mjs"
   },
   "keywords": [],
   "author": "",
   "license": "ISC",
   "dependencies": {
-    "@bitwarden/cli": "^2022.11.0",
-    "dotenv": "^16.0.3",
-    "execa": "^6.1.0",
-    "filenamify": "^5.1.1",
-    "yargs": "^17.6.2"
-  }
+    "@bitwarden/cli": "^2026.6.0",
+    "execa": "^10.2.1",
+    "filenamify": "^7.0.3",
+    "yargs": "^18.2.0"
+  },
+  "engines": {
+    "node": ">=24"
+  },
+  "type": "module"
 }

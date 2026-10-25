@@ -1,0 +1,128 @@
+# ============================================================================================
+#  LOCAL PLAYGROUND ONLY. THIS IS NOT A PRODUCTION-READY VAULTWARDEN SETUP.
+#  Open signups, no admin panel, no mail, unpinned image, throwaway self-signed TLS with the
+#  key on disk, data in ./tmp, no backups of its own. Use it to practice backups and restores
+#  on throwaway accounts, never for real passwords.
+# ============================================================================================
+#
+# A Vaultwarden to back up from and (later) restore into, plus a backup service pointed at it.
+# It is independent of compose.example.yaml and never touches your real credentials.
+#
+# ONE COMMAND
+#   npm run playground              # certificates, Vaultwarden, and two registered test users (a@test.local, b@test.local)
+#   npm run playground -- --reset   # wipe the playground's data first
+#   Credentials (random passwords, mode 600, git-ignored): tmp/test-vw-a.json and tmp/test-vw-b.json
+#   Web vault: https://localhost:8222 (accept the certificate warning, or trust tmp/vw-tls/ca.crt)
+#
+# USE
+#   docker compose -f compose.vaultwarden.yaml run --rm bwbu-test     # backup test user a -> ./tmp/backup-test-a (TEST_USER=b for b)
+#   docker compose -f compose.vaultwarden.yaml down                   # stop (data stays in ./tmp/vaultwarden)
+#   rm -rf tmp/vaultwarden tmp/backup-test tmp/vw-tls                 # throw everything away
+#
+# Container uid/gid come from BWBU_UID / BWBU_GID in .env (default 1000), like compose.example.yaml.
+
+name: bwbu-playground
+
+services:
+  vaultwarden:
+    image: vaultwarden/server:latest # unpinned on purpose, it is a playground
+    restart: "no"
+    security_opt: [no-new-privileges:true]
+    environment:
+      DOMAIN: https://localhost:${VW_PORT:-8222}
+      ROCKET_PORT: ${VW_PORT:-8222} # same port inside and outside, so links built from DOMAIN work from bwbu-test too
+      ROCKET_TLS: '{certs="/ssl/vw.crt",key="/ssl/vw.key"}' # Vaultwarden serves https itself
+      SIGNUPS_ALLOWED: "true" # lets you register test accounts in the browser. Never do this on a real server.
+      # A test server must not rate-limit its own tests: they log in dozens of times in a few minutes.
+      LOGIN_RATELIMIT_SECONDS: "1"
+      LOGIN_RATELIMIT_MAX_BURST: "1000"
+      LOG_LEVEL: warn
+    ports:
+      - "127.0.0.1:${VW_PORT:-8222}:${VW_PORT:-8222}" # localhost only
+    volumes:
+      - ./tmp/vaultwarden:/data
+      - ./tmp/vw-tls:/ssl:ro
+
+  bwbu-test:
+    build: .
+    image: bwbu:local
+    pull_policy: build # always rebuild from this repo, so the image can never be stale
+    user: "${BWBU_UID:-1000}:${BWBU_GID:-1000}" # must own tmp/test-vw-a.json
+    read_only: true
+    tmpfs:
+      - /tmp:size=1g,mode=1777
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    restart: "no"
+    command: backup
+    secrets: [bwbu_test_credentials]
+    volumes:
+      - ./tmp/backup-test-${TEST_USER:-a}:/backup
+      - ./tmp/vw-tls/ca.crt:/ssl/ca.crt:ro
+    environment:
+      BWBU_CREDENTIALS_FILE: /run/secrets/bwbu_test_credentials
+      NODE_EXTRA_CA_CERTS: /ssl/ca.crt # trust the playground's throwaway CA
+      BWBU_INCLUDE_ORG: ${BWBU_INCLUDE_ORG:-true}
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+    # Shares vaultwarden's network namespace: inside this container https://localhost:8222 IS Vaultwarden, exactly like
+    # for your browser. Needed because Vaultwarden builds attachment download links from its DOMAIN setting.
+    network_mode: "service:vaultwarden"
+    depends_on: [vaultwarden]
+
+  # Unpacks a backup of the test user (TEST_USER, default a) from ./tmp/backup-test-<user> into ./tmp/unpack-test-<user>.
+  #   E2E_ARCHIVE=bw-backup-<time>.7z docker compose -f compose.vaultwarden.yaml run --rm unpack-test
+  unpack-test:
+    build: .
+    image: bwbu:local
+    pull_policy: build
+    user: "${BWBU_UID:-1000}:${BWBU_GID:-1000}"
+    read_only: true
+    tmpfs:
+      - /tmp:size=1g,mode=1777
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    restart: "no"
+    command: unpack
+    secrets: [bwbu_test_credentials]
+    volumes:
+      - ./tmp/backup-test-${TEST_USER:-a}:/backup:ro
+      - ./tmp/unpack-test-${TEST_USER:-a}:/unpack
+    environment:
+      BWBU_CREDENTIALS_FILE: /run/secrets/bwbu_test_credentials
+      BWBU_SOURCE_FILE: /backup/${E2E_ARCHIVE:-missing.7z}
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+
+  # Mirrors an unpacked backup into test user b (repeatable, one way). Dry run unless BWBU_APPLY=true.
+  #   BWBU_APPLY=true docker compose -f compose.vaultwarden.yaml run --rm restore-test
+  # The backup to restore is read from ./tmp/restore-source (an unpacked backup, containing personal/).
+  restore-test:
+    build: .
+    image: bwbu:local
+    pull_policy: build
+    user: "${BWBU_UID:-1000}:${BWBU_GID:-1000}"
+    read_only: true
+    tmpfs:
+      - /tmp:size=1g,mode=1777
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    restart: "no"
+    command: restore --sourceDir /source
+    secrets: [bwbu_restore_target]
+    volumes:
+      - ${RESTORE_SOURCE:-./tmp/restore-source}:/source:ro
+      - ./tmp/vw-tls/ca.crt:/ssl/ca.crt:ro
+    environment:
+      BWBU_CREDENTIALS_FILE: /run/secrets/bwbu_restore_target
+      BWBU_APPLY: ${BWBU_APPLY:-false}
+      BWBU_INCLUDE_PERSONAL: ${BWBU_INCLUDE_PERSONAL:-true}
+      BWBU_INCLUDE_ORG: ${BWBU_INCLUDE_ORG:-true}
+      NODE_EXTRA_CA_CERTS: /ssl/ca.crt
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+    network_mode: "service:vaultwarden"
+    depends_on: [vaultwarden]
+
+secrets:
+  bwbu_test_credentials:
+    file: ./tmp/test-vw-${TEST_USER:-a}.json # TEST_USER=b backs up the restore target instead
+  bwbu_restore_target:
+    file: ./tmp/test-vw-b.json

@@ -1,0 +1,79 @@
+# Example Compose setup for bitwarden-backup. Copy to compose.yaml (git/docker-ignored
+# locally) and adjust the paths marked CHANGE ME.
+#
+# ONE-TIME SETUP (on the Docker host)
+#   1. Create the credentials file OUTSIDE this repo and OUTSIDE the backup volume,
+#      as the host user that will run the backups, readable by that user only.
+#      Write it with an editor, not `echo`, so the secrets stay out of your shell history:
+#         umask 077 && nano /etc/bwbu/credentials.json     # or chmod 600 afterwards
+#      Schema and where each value comes from: see "Credentials file" in README.md.
+#      All four fields are required for a backup:
+#         { "clientId": "user.xxxxxxxx-...", "clientSecret": "...",
+#           "masterPassword": "...", "passphrase": "long random string" }
+#   2. Tell the container to run as the file's owner, so mode 600 is readable inside.
+#      Put this in a `.env` next to this file (not a secret, but git-ignored anyway):
+#         BWBU_UID=1000      # output of `id -u` for the file owner
+#         BWBU_GID=1000      # output of `id -g`
+#      Defaults to 1000:1000 (the image's `node` user) when unset. Backups written to
+#      /backup are owned by this uid too.
+#   3. Keep a copy of the credentials in your password manager, otherwise a lost host
+#      means undecryptable backups.
+#
+# RUN
+#   docker compose run --rm bwbu                      # backup
+#   docker compose run --rm unpack                    # unpack (set BWBU_SOURCE_FILE first)
+# CRON (host crontab, daily at 03:15; cron's mail shows failures since the exit code is non-zero)
+#   15 3 * * * cd /srv/bwbu && docker compose run --rm bwbu
+#
+# WHY NOT ENVIRONMENT VARIABLES FOR SECRETS?
+#   They are visible in `docker inspect`, /proc/<pid>/environ and crash dumps.
+#   A file mounted via `secrets:` is only readable inside the container.
+
+name: bwbu
+
+# Shared hardening, applied to both services below.
+x-hardened: &hardened
+  image: johnlindahl/bitwarden-backup:latest # CHANGE ME: pin a version tag (Renovate can bump it)
+  user: "${BWBU_UID:-1000}:${BWBU_GID:-1000}" # must match the owner of the credentials file (see setup step 2)
+  read_only: true # immutable root filesystem
+  tmpfs:
+    # The working directory holds the plaintext vault export and bw's login state.
+    # Keeping /tmp in RAM means plaintext never touches the disk.
+    - /tmp:size=1g,mode=1777 # raise size if your attachments are large
+  cap_drop: [ALL] # needs no Linux capabilities
+  security_opt: [no-new-privileges:true]
+  restart: "no" # one-shot job, cron decides when it runs
+  secrets: [bwbu_credentials]
+  environment:
+    BWBU_CREDENTIALS_FILE: /run/secrets/bwbu_credentials
+    LOG_LEVEL: INFO # DEBUG logs commands, never vault content or secrets
+
+services:
+  bwbu:
+    <<: *hardened
+    command: backup
+    volumes:
+      # One encrypted .7z file per backup ends up here.
+      - /srv/bwbu/backup:/backup # CHANGE ME
+    environment:
+      BWBU_CREDENTIALS_FILE: /run/secrets/bwbu_credentials
+      LOG_LEVEL: INFO
+      # Optional toggles (all default to true):
+      # BWBU_INCLUDE_PERSONAL: "false"
+      # BWBU_INCLUDE_ORG: "true"
+      # BWBU_INCLUDE_FILES: "true"
+
+  unpack:
+    <<: *hardened
+    command: unpack
+    profiles: [manual] # never started by a plain `docker compose up`
+    volumes:
+      - /srv/bwbu/backup:/backup:ro # CHANGE ME (same as above, read-only here)
+      - /srv/bwbu/unpack:/unpack # CHANGE ME: decrypted, plaintext output! Delete it afterwards
+    environment:
+      BWBU_CREDENTIALS_FILE: /run/secrets/bwbu_credentials
+      BWBU_SOURCE_FILE: /backup/bw-backup-CHANGE-ME.7z
+
+secrets:
+  bwbu_credentials:
+    file: /etc/bwbu/credentials.json # CHANGE ME: see ONE-TIME SETUP

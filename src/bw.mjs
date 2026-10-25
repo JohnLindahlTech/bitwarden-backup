@@ -1,250 +1,116 @@
 import { execa } from 'execa';
-import filenamify from 'filenamify';
-import fs from 'node:fs/promises';
-import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { redactor } from './credentials.mjs';
 import logger from './log.mjs';
-import {PERSONAL, EXPORT_FILE, RAW_FILE, PERSONAL_ATTACHMENTS_DIR, ORGANIZATION, LIST_FILE, ATTACHMENTS, FOLDERS_FILE, COLLECTIONS_FILE} from './constants.mjs';
 
-const ALREADY_LOGGED_IN_REGEX = /^You are already logged in as/
+// Run bw's JS entrypoint with the current node, so no shell, `env` or PATH lookup is needed.
+const BW_SCRIPT = fileURLToPath(new URL('../node_modules/@bitwarden/cli/build/bw.js', import.meta.url));
+const encode = (obj) => Buffer.from(JSON.stringify(obj)).toString('base64');
+const ALREADY_LOGGED_IN_REGEX = /You are already logged in as/;
 
-const BW_EXECUTABLE="node_modules/.bin/bw"
+/**
+ * Thin wrapper around the `bw` CLI. Secrets only travel via the child's env or stdin,
+ * never argv. Errors are redacted, and stdout (the vault!) is never logged.
+ */
+export function createBw({ credentials, appDataDir, bin = process.execPath, binArgs = bin === process.execPath ? [BW_SCRIPT] : [] }) {
+  let session;
+  let redact = redactor(credentials);
 
-export function getAttachmentDirPath({attachmentsDir, itemName, itemId, fileId}){
-  return path.join(attachmentsDir, filenamify(itemName), filenamify(itemId),filenamify(fileId), '/')
-}
-
-export async function login(argv){
-  const cmdArgs = ["login", '--apikey'];
-  const execaOpts = {
-    env: {
-      BW_CLIENTID: argv.bwClientid,
-      BW_CLIENTSECRET: argv.bwClientsecret,
+  async function run(args, { input, env } = {}) {
+    logger.debug(`bw ${args.slice(0, 2).join(' ')}`);
+    try {
+      const { stdout } = await execa(bin, [...binArgs, ...args], {
+        env: {
+          ...(appDataDir && { BITWARDENCLI_APPDATA_DIR: appDataDir }),
+          BW_CLIENTID: credentials.clientId,
+          BW_CLIENTSECRET: credentials.clientSecret,
+          ...(session && { BW_SESSION: session }),
+          ...env,
+        },
+        input,
+      });
+      return stdout;
+    } catch (err) {
+      // Download links carry signed ?token=... query strings, never let those reach logs or errors.
+      const stderr = redact(err.stderr ?? '').replace(/(https?:\/\/[^\s?]+)\?\S*/g, '$1?[query removed]');
+      // bw prints raw stack traces; prefer the line that names the error (FetchError, ECONNREFUSED, ...).
+      const lines = stderr.split('\n').filter(Boolean);
+      const firstLine = lines.find((l) => /^\s*\w*Error:/.test(l)) ?? lines.find((l) => /\bE[A-Z]{3,}\b|certificate/.test(l)) ?? lines[0] ?? redact(err.shortMessage ?? 'unknown error');
+      throw Object.assign(new Error(`bw ${args[0]} failed (exit ${err.exitCode ?? '?'}): ${firstLine.slice(0, 300)}`), { stderr });
     }
   }
-  try{
-    const {stdout} = await execa(BW_EXECUTABLE, cmdArgs, execaOpts)
-    logger.debug(stdout);
-  } catch (err){
-    if(ALREADY_LOGGED_IN_REGEX.test(err.stderr)){
-      // Already logged in, nothing to see here, lets carry on.
-      return;
-    }
-    throw err
-  }
-}
 
-export async function exportPersonalVault(argv){
-  const cmdArgs = ["export", "--format", "json", "--output", path.join(argv.tempDir, PERSONAL, EXPORT_FILE)]
-  const execaOpts = {
-    env: {
-      BW_CLIENTID: argv.bwClientid,
-      BW_CLIENTSECRET: argv.bwClientsecret,
-      BW_SESSION: argv.bwSession
-    },
-    input: argv.bwMasterpassword
-  }
-  try{
-    const {stdout} = await execa(BW_EXECUTABLE, cmdArgs, execaOpts)
-    logger.debug(stdout);
-  } catch (err){
-    throw err
-  }
-}
-
-export async function exportOrgVault(org, argv){
-  const cmdArgs = ["export", "--format", "json", "--output", path.join(argv.tempDir, ORGANIZATION, filenamify(org.name), EXPORT_FILE), "--organizationid", org.id]
-  const execaOpts = {
-    env: {
-      BW_CLIENTID: argv.bwClientid,
-      BW_CLIENTSECRET: argv.bwClientsecret,
-      BW_SESSION: argv.bwSession
-    },
-    input: argv.bwMasterpassword
-  }
-  try{
-    const {stdout} = await execa(BW_EXECUTABLE, cmdArgs, execaOpts)
-    logger.debug(stdout);
-  } catch (err){
-    throw err
-  }
-}
-
-export async function sync(argv){
-  const cmdArgs = ["sync"]
-  const execaOpts = {
-    env: {
-      BW_CLIENTID: argv.bwClientid,
-      BW_CLIENTSECRET: argv.bwClientsecret,
-      BW_SESSION: argv.bwSession
-    },
-  }
-  try{
-    const {stdout} = await execa(BW_EXECUTABLE, cmdArgs, execaOpts)
-    logger.debug(stdout);
-  } catch (err){
-    throw err
-  }
-}
-
-export async function listPersonalVault(argv){
-  const cmdArgs = ["list", "items"]
-  const execaOpts = {
-    env: {
-      BW_CLIENTID: argv.bwClientid,
-      BW_CLIENTSECRET: argv.bwClientsecret,
-      BW_SESSION: argv.bwSession
-    },
-  }
-  try{
-    const {stdout} = await execa(BW_EXECUTABLE, cmdArgs, execaOpts)
-    logger.debug(stdout);
-    const vault = await JSON.parse(stdout);
-    await fs.writeFile(path.join(argv.tempDir, PERSONAL, RAW_FILE), JSON.stringify(vault, null, 2));
-    return vault;
-  } catch (err){
-    throw err
-  }
-}
-export async function listOrgVault(org, argv){
-  const cmdArgs = ["list", "items", '--organizationid', org.id]
-  const execaOpts = {
-    env: {
-      BW_CLIENTID: argv.bwClientid,
-      BW_CLIENTSECRET: argv.bwClientsecret,
-      BW_SESSION: argv.bwSession
-    },
-  }
-  try{
-    const {stdout} = await execa(BW_EXECUTABLE, cmdArgs, execaOpts)
-    logger.debug(stdout);
-    const vault = await JSON.parse(stdout);
-    await fs.writeFile(path.join(argv.tempDir, ORGANIZATION, filenamify(org.name), RAW_FILE), JSON.stringify(vault, null, 2));
-    return vault;
-  } catch (err){
-    throw err
-  }
-}
-
-
-export async function exportFile({fileId, itemId, itemName, attachmentsDir}, org, argv){
-  const itemDir = getAttachmentDirPath({attachmentsDir, itemName, itemId, fileId});
-  const cmdArgs = ["get", "attachment", fileId, "--itemid", itemId, "--output", itemDir]
-  if (org){
-    cmdArgs.push('--organizationid', org.id)
-  }
-  const execaOpts = {
-    env: {
-      BW_CLIENTID: argv.bwClientid,
-      BW_CLIENTSECRET: argv.bwClientsecret,
-      BW_SESSION: argv.bwSession
+  async function json(args, opts) {
+    const stdout = await run(args, opts);
+    try {
+      return JSON.parse(stdout);
+    } catch {
+      throw new Error(`bw ${args.slice(0, 2).join(' ')} returned invalid JSON`);
     }
   }
-  try{
-    await fs.mkdir(itemDir, {recursive: true});
-    const {stdout} = await execa(BW_EXECUTABLE, cmdArgs, execaOpts)
-    logger.debug(stdout);
-  } catch (err){
-    logger.error(err)
-    // throw err
-  }
-}
 
-export async function exportPersonalFiles(vault, argv){
-  const itemsWithAttachments = vault.filter(item => item.attachments?.length > 0);
-  const filesToFetch = itemsWithAttachments.flatMap((item) => item.attachments.map(attachment => ({itemId: item.id, itemName: item.name, fileName: attachment.fileName, fileId: attachment.id, attachmentsDir: path.join(argv.tempDir, PERSONAL_ATTACHMENTS_DIR)})))
-  for (const [index, file] of filesToFetch.entries()) {
-    logger.info(`Fetching file ${index + 1}/${filesToFetch.length}`)
-    logger.debug(`Fetching ${file.itemName} - ${file.fileName}`)
-    await exportFile(file, null, argv)
-  }
-}
+  const orgArgs = (orgId) => (orgId ? ['--organizationid', orgId] : []);
 
-
-export async function exportOrgFiles(vault, org, argv){
-  const itemsWithAttachments = vault.filter(item => item.attachments?.length > 0);
-  const filesToFetch = itemsWithAttachments.flatMap((item) => item.attachments.map(attachment => ({itemId: item.id, itemName: item.name, fileName: attachment.fileName, fileId: attachment.id, attachmentsDir: path.join(argv.tempDir, ORGANIZATION, filenamify(org.name), ATTACHMENTS)})))
-  for (const [index, file] of filesToFetch.entries()) {
-    logger.info(`Fetching file ${index + 1}/${filesToFetch.length}`)
-    logger.debug(`Fetching ${file.itemName} - ${file.fileName}`)
-    await exportFile(file, argv)
-  }
-}
-
-export async function unlock(argv){
-  const cmdArgs = ["unlock", "--raw", "--passwordenv", "BW_MASTERPASSWORD"]
-  const execaOpts = {
-    env: {
-      BW_CLIENTID: argv.bwClientid,
-      BW_CLIENTSECRET: argv.bwClientsecret,
-      BW_MASTERPASSWORD: argv.bwMasterpassword,
-    }
-  }
-  try{
-    const {stdout} = await execa(BW_EXECUTABLE, cmdArgs, execaOpts)
-    logger.debug(stdout);
-    return stdout;
-  } catch (err){
-    throw err
-  }
-}
-
-export async function listOrgs(argv){
-  const cmdArgs = ["list", "organizations"]
-  const execaOpts = {
-    env: {
-      BW_CLIENTID: argv.bwClientid,
-      BW_CLIENTSECRET: argv.bwClientsecret,
-      BW_SESSION: argv.bwSession
+  return {
+    async login() {
+      // Must happen while logged out; each run starts from a fresh bw state, so it always is.
+      if (credentials.serverUrl) await run(['config', 'server', credentials.serverUrl]);
+      try {
+        await run(['login', '--apikey']);
+      } catch (err) {
+        if (!ALREADY_LOGGED_IN_REGEX.test(err.stderr)) throw err;
+      }
     },
-  }
-  try{
-    const {stdout} = await execa(BW_EXECUTABLE, cmdArgs, execaOpts)
-    logger.debug(stdout);
-    const orgs = await JSON.parse(stdout);
-    await fs.writeFile(path.join(argv.tempDir, ORGANIZATION, LIST_FILE), JSON.stringify(orgs, null, 2));
-    return orgs;
-  } catch (err){
-    throw err
-  }
 
-}
-
-export async function listPersonalFolders(argv){
-  const cmdArgs = ["list", "folders"]
-  const execaOpts = {
-    env: {
-      BW_CLIENTID: argv.bwClientid,
-      BW_CLIENTSECRET: argv.bwClientsecret,
-      BW_SESSION: argv.bwSession
+    async unlock() {
+      const stdout = await run(['unlock', '--raw', '--passwordenv', 'BW_PASSWORD'], {
+        env: { BW_PASSWORD: credentials.masterPassword },
+      });
+      session = stdout.trim();
+      redact = redactor({ ...credentials, session });
     },
-  }
-  try{
-    const {stdout} = await execa(BW_EXECUTABLE, cmdArgs, execaOpts)
-    logger.debug(stdout);
-    const folders = await JSON.parse(stdout);
-    await fs.writeFile(path.join(argv.tempDir, PERSONAL, FOLDERS_FILE), JSON.stringify(folders, null, 2));
-    return folders;
-  } catch (err){
-    throw err
-  }
-}
 
-export async function listOrgCollections(org, argv){
-  const cmdArgs = ["list", "org-collections", "--organizationid", org.id]
-  const execaOpts = {
-    env: {
-      BW_CLIENTID: argv.bwClientid,
-      BW_CLIENTSECRET: argv.bwClientsecret,
-      BW_SESSION: argv.bwSession
+    async logout() {
+      session = undefined;
+      await run(['logout']);
     },
-  }
-  try{
-    const {stdout} = await execa(BW_EXECUTABLE, cmdArgs, execaOpts)
-    logger.debug(stdout);
-    const collections = await JSON.parse(stdout);
-    await fs.writeFile(path.join(argv.tempDir, ORGANIZATION, filenamify(org.name), COLLECTIONS_FILE), JSON.stringify(collections, null, 2));
-    return collections;
-  } catch (err){
-    throw err
-  }
+
+    sync: () => run(['sync']),
+
+    // Bitwarden re-checks the master password on export, read from stdin.
+    // format 'zip' (personal vault only) bundles the attachments, organizations only support json.
+    exportVault: ({ file, orgId, format = 'json' }) =>
+      run(['export', '--format', format, '--output', file, ...orgArgs(orgId)], { input: credentials.masterPassword }),
+
+    listItems: ({ orgId, trash } = {}) => json(['list', 'items', ...(trash ? ['--trash'] : []), ...orgArgs(orgId)]),
+    listFolders: () => json(['list', 'folders']),
+    listOrgs: () => json(['list', 'organizations']),
+    listOrgCollections: ({ orgId }) => json(['list', 'org-collections', ...orgArgs(orgId)]),
+    createOrgCollection: ({ orgId, name }) =>
+      json(['create', 'org-collection', ...orgArgs(orgId)], { input: encode({ organizationId: orgId, name, externalId: null, groups: [] }) }),
+    // `edit item` does not move an item between collections, this does.
+    editItemCollections: async ({ id, orgId, collectionIds }) => {
+      await run(['edit', 'item-collections', id, ...orgArgs(orgId)], { input: encode(collectionIds) });
+      return json(['get', 'item', id]);
+    },
+
+    // `format` is a bw import format name, 'bitwardenjson' is what our export.json is.
+    importFile: ({ file, format = 'bitwardenjson', orgId }) => run(['import', format, file, ...orgArgs(orgId)]),
+
+    // Items go to bw as base64 JSON on stdin, so passwords never show up in a process list. Returns the item.
+    createItem: (item) => json(['create', 'item'], { input: encode(item) }),
+    editItem: (id, item) => json(['edit', 'item', id], { input: encode(item) }),
+    getItem: (id) => json(['get', 'item', id]),
+    deleteItem: (id) => run(['delete', 'item', id]), // to the trash, not permanent
+    // bw prints a plain message here, not the item, so read it back
+    restoreItem: async (id) => { await run(['restore', 'item', id]); return json(['get', 'item', id]); },
+    createFolder: (name) => json(['create', 'folder'], { input: encode({ name }) }),
+
+    // Both return/affect the item, createAttachment returns it with its attachments list.
+    createAttachment: ({ file, itemId }) => json(['create', 'attachment', '--file', file, '--itemid', itemId]),
+    deleteAttachment: ({ attachmentId, itemId }) => run(['delete', 'attachment', attachmentId, '--itemid', itemId]),
+
+    getAttachment: ({ fileId, itemId, orgId, output }) =>
+      run(['get', 'attachment', fileId, '--itemid', itemId, '--output', output, ...orgArgs(orgId)]),
+  };
 }

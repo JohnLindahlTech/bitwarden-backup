@@ -1,56 +1,75 @@
 name: Build
 on:
+  pull_request:
   push:
     branches:
       - main
 jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - run: npm ci
+      - run: npm test
+
+  # Always: prove the image builds for both CPU types, without pushing anything.
+  image-check:
+    needs: test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: false
+          platforms: linux/amd64,linux/arm64
+
+  # The only condition in this workflow: publish to Docker Hub only on a push, and pushes only trigger on main.
   build:
+    needs: [test, image-check]
+    if: github.event_name == 'push'
     env:
       IMAGE: johnlindahl/bitwarden-backup
-    runs-on: ubuntu-22.04
+    runs-on: ubuntu-latest
     steps:
-      - name: Check out repository code
-        uses: actions/checkout@v3
-      - name: Login to Docker Hub
-        uses: docker/login-action@v2
+      - uses: actions/checkout@v4
+      - uses: docker/login-action@v3
         with:
           username: ${{ secrets.DOCKER_API_USER }}
           password: ${{ secrets.DOCKER_API_KEY }}
       - name: Bump version and push tag
         id: version
-        uses: mathieudutour/github-tag-action@v6.1
+        uses: mathieudutour/github-tag-action@v6.2
         with:
           github_token: ${{ secrets.GHA_PAT }}
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v2
-
+      - uses: docker/setup-buildx-action@v3
       - name: Docker meta
         id: meta
-        uses: docker/metadata-action@v4
+        uses: docker/metadata-action@v5
         with:
-          # list of Docker images to use as base name for tags
-          images: ${{env.IMAGE}}
-            
-          # generate Docker tags based on the following events/attributes
+          images: ${{ env.IMAGE }}
           tags: |
-            type=schedule
-            type=ref,event=branch
-            type=ref,event=pr
-            type=semver,pattern={{version}}
-            type=semver,pattern={{major}}.{{minor}}
-            type=semver,pattern={{major}}
-            type=raw,value=latest,enable={{is_default_branch}}
-
-      - name: Build and push
-        uses: docker/build-push-action@v3
+            type=semver,pattern={{version}},value=${{ steps.version.outputs.new_tag }}
+            type=semver,pattern={{major}}.{{minor}},value=${{ steps.version.outputs.new_tag }}
+            type=semver,pattern={{major}},value=${{ steps.version.outputs.new_tag }}
+            type=raw,value=latest
+      - uses: docker/build-push-action@v6
         with:
           context: .
-          file: Dockerfile
           push: true
-          tags: ${{ steps.meta.outputs.tags }},${{ env.IMAGE }}:${{ steps.version.outputs.new_tag }}
-      - name: Docker Hub Description
-        uses: peter-evans/dockerhub-description@v3
+          # One tag, two architectures: Docker picks the right one (Intel/AMD vs Apple Silicon/ARM).
+          platforms: linux/amd64,linux/arm64
+          tags: ${{ steps.meta.outputs.tags }}
+      - uses: peter-evans/dockerhub-description@v4
         with:
           username: ${{ secrets.DOCKER_API_USER }}
           password: ${{ secrets.DOCKER_API_KEY }}
           repository: ${{ env.IMAGE }}
+          # The Docker Hub page is written for people who just run the image, not the developer README.
+          readme-filepath: ./DOCKERHUB.md
+          short-description: Encrypted Bitwarden backups of your vault, organizations and attachments, optionally mirrored.

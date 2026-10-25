@@ -1,27 +1,45 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
-import { ENCRYPT_FILE_EXTENSION, TAR_FILE_EXTENSION } from './constants.mjs';
+import { ARCHIVE_FILE_EXTENSION } from './constants.mjs';
+import { loadCredentials } from './credentials.mjs';
 import logger from './log.mjs';
-import { decrypt, untar } from './tar.mjs';
+import { extractArchive } from './archive.mjs';
 
-export async function unpack(argv){
-  logger.info(`Will ensure target dir: ${argv.unpackDir}`);
-  await fs.mkdir(argv.unpackDir, {recursive: true});
-  
-  logger.info(`Will decrypt: ${argv.sourceFile}`)
-  await decrypt(argv)
+export async function unpack(argv, deps = {}) {
+  if (!argv.sourceFile) {
+    throw new Error('No source file given: set BWBU_SOURCE_FILE or pass --sourceFile.');
+  }
+  const isFile = await fs.stat(argv.sourceFile).then((s) => s.isFile(), () => false);
+  if (!isFile) {
+    throw new Error(`Source file not found: ${argv.sourceFile}`);
+  }
+  const { passphrase } = await loadCredentials(argv.credentialsFile, ['passphrase']);
 
-  const filename = path.basename(argv.sourceFile);
-  const tarFile = path.join(argv.unpackDir, filename.replace(new RegExp(`${ENCRYPT_FILE_EXTENSION}$`), ''));
-  const untarDir = tarFile.replace(new RegExp(`${TAR_FILE_EXTENSION}$`), '')
-  
-  await fs.mkdir(untarDir, {recursive: true});
-  
-  logger.info(`Will untar: ${tarFile} -> ${untarDir}/`);
-  await untar(tarFile, untarDir);
+  const name = path.basename(argv.sourceFile, ARCHIVE_FILE_EXTENSION);
+  const targetDir = path.join(argv.unpackDir, name);
+  if (!name || path.resolve(targetDir) === path.resolve(argv.unpackDir)) {
+    throw new Error(`Cannot derive a sub directory name from: ${argv.sourceFile}`);
+  }
 
-  logger.info(`Will remove: ${tarFile}`);
-  await fs.rm(tarFile);
+  const existing = await fs.readdir(targetDir).catch((err) => (err.code === 'ENOENT' ? null : Promise.reject(err)));
+  if (existing?.length > 0) {
+    throw new Error(`Refusing to unpack into non-empty directory: ${targetDir}`);
+  }
+  await fs.mkdir(targetDir, { recursive: true });
 
-  logger.info(`DONE!`)
+  logger.info(`Will decrypt and extract: ${argv.sourceFile} -> ${targetDir}/`);
+  try {
+    await extractArchive({ sourceFile: argv.sourceFile, passphrase, targetDir }, deps);
+  } catch (err) {
+    // Only remove what this run created, never a directory that was already there.
+    if (existing === null) {
+      await fs.rm(targetDir, { recursive: true, force: true });
+    }
+    throw new Error(`Could not unpack the backup (wrong passphrase or corrupt archive?): ${err.shortMessage ?? err.message}`);
+  }
+  const extracted = await fs.readdir(targetDir);
+  if (extracted.length === 1 && extracted[0].endsWith('.tar.gz')) {
+    logger.warn(`Legacy backup: the files are inside ${extracted[0]}, extract it with: tar -xzf ${extracted[0]}`);
+  }
+  logger.info('DONE!');
 }

@@ -3,3 +3,10 @@
 node_modules/
 *.log
 tmp/
+# Real credentials files (credentials.example.json is the template)
+credentials.json
+*.credentials.json
+compose.yaml
+
+# macOS
+.DS_Store
