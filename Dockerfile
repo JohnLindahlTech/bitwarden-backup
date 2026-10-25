@@ -55,7 +55,7 @@ ENV BWBU_ENSURE_FRESH="true"
 ENV BWBU_INCLUDE_PERSONAL="true"
 ENV BWBU_INCLUDE_ORG="true"
 ENV BWBU_INCLUDE_FILES="true"
-ENV BWBU_ENCRYPT="true"
+ENV BWBU_ARCHIVE="true"
 ENV BWBU_CLEAN_UP="true"
 
 ENTRYPOINT ["/nodejs/bin/node", "/app/src/index.mjs"]

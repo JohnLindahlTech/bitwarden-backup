@@ -24,7 +24,7 @@ test('serverUrl is optional and must be an http(s) URL', async () => {
 test('backup points bw at the configured server before logging in', async () => {
   const sb = await makeSandbox();
   const credentialsFile = await credsWith(sb, { serverUrl: 'http://vaultwarden:80' });
-  await backup(sb.argv({ credentialsFile, encrypt: false, cleanUp: false }), sb.deps);
+  await backup(sb.argv({ credentialsFile, cleanUp: false }), sb.deps);
   const calls = (await sb.bwCalls()).map((c) => c.args.slice(0, 3).join(' '));
   assert.equal(calls[0], 'config server http://vaultwarden:80');
   assert.equal(calls[1], 'login --apikey');
@@ -33,7 +33,7 @@ test('backup points bw at the configured server before logging in', async () => 
 
 test('without serverUrl bw keeps its default server', async () => {
   const sb = await makeSandbox();
-  await backup(sb.argv({ encrypt: false, cleanUp: false }), sb.deps);
+  await backup(sb.argv({ cleanUp: false }), sb.deps);
   assert.equal((await sb.bwCalls()).some((c) => c.args[0] === 'config'), false);
   await sb.cleanup();
 });

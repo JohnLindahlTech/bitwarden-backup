@@ -8,7 +8,7 @@ import { exists, makeSandbox } from '../testing/helpers.mjs';
 
 test('backs up personal and org vaults including org attachments', async () => {
   const sb = await makeSandbox();
-  const argv = sb.argv({ encrypt: false, cleanUp: false });
+  const argv = sb.argv({ cleanUp: false });
   await backup(argv, sb.deps);
 
   const read = (...p) => fs.readFile(path.join(argv.tempDir, ...p), 'utf8');
@@ -34,7 +34,7 @@ test('backs up personal and org vaults including org attachments', async () => {
 test('a failed attachment does not stop the others but fails the backup', async () => {
   const sb = await makeSandbox();
   process.env.FAKE_BW_FAIL_FILE = 'oa1';
-  const argv = sb.argv({ encrypt: false, cleanUp: false });
+  const argv = sb.argv({ cleanUp: false });
   await assert.rejects(backup(argv, sb.deps), /1 of 2 attachment\(s\) failed.*oi1\/oa1/);
   assert.ok(await exists(path.join(argv.tempDir, 'org', 'My Org', 'org-1', 'attachments', 'Org item', 'oi1', 'oa2', 'file.txt')));
   await sb.cleanup();
@@ -159,7 +159,7 @@ test('unpack keeps a pre-existing empty target dir when extraction fails', async
 
 test('org folders are keyed by name and id, so same-named orgs cannot collide', async () => {
   const sb = await makeSandbox();
-  const argv = sb.argv({ encrypt: false, cleanUp: false, includePersonal: false });
+  const argv = sb.argv({ cleanUp: false, includePersonal: false });
   await backup(argv, sb.deps);
   assert.deepEqual(await fs.readdir(path.join(argv.tempDir, 'org', 'My Org')), ['org-1']);
   await sb.cleanup();

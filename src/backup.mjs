@@ -8,6 +8,7 @@ import { ATTACHMENTS, COLLECTIONS_FILE, EXPORT_FILE, FOLDERS_FILE, LIST_FILE, SK
 import { loadCredentials } from './credentials.mjs';
 import logger from './log.mjs';
 import { createArchive } from './archive.mjs';
+import { restore } from './restore.mjs';
 
 const writeJson = (file, data) => fs.writeFile(file, JSON.stringify(data, null, 2));
 
@@ -82,10 +83,13 @@ async function backupOrganizations(bw, argv) {
 }
 
 export async function backup(argv, { bwBin, bwBinArgs, sevenZipBin } = {}) {
+  if (!argv.archive && !argv.targetCredentialsFile) {
+    throw new Error('Nothing to do: the backup would go nowhere. Keep the archive, or give --targetCredentialsFile to mirror it into another vault.');
+  }
   const needsBw = argv.includePersonal || argv.includeOrg;
   const credentials = await loadCredentials(argv.credentialsFile, [
     ...(needsBw ? ['clientId', 'clientSecret', 'masterPassword'] : []),
-    ...(argv.encrypt ? ['passphrase'] : []),
+    ...(argv.archive ? ['passphrase'] : []),
   ]);
 
   const stamp = new Date().toISOString().replaceAll(/[.:]/g, '-');
@@ -122,17 +126,40 @@ export async function backup(argv, { bwBin, bwBinArgs, sevenZipBin } = {}) {
       logger.info('Did not export Organization vaults, as it was not requested.');
     }
 
-    if (argv.encrypt) {
-      logger.info(`Will create encrypted archive: ${targetFile}`);
-      await fs.mkdir(argv.backupDir, { recursive: true });
-      await createArchive({ source: argv.tempDir, target: targetFile, passphrase: credentials.passphrase }, { sevenZipBin });
-      archived = true;
+    // The archive and the mirror are independent: both are attempted, and a failure of one does not skip the other.
+    const failures = [];
+    if (argv.archive) {
+      try {
+        logger.info(`Will create encrypted archive: ${targetFile}`);
+        await fs.mkdir(argv.backupDir, { recursive: true });
+        await createArchive({ source: argv.tempDir, target: targetFile, passphrase: credentials.passphrase }, { sevenZipBin });
+        archived = true;
+      } catch (err) {
+        logger.error(`Creating the archive failed: ${err.shortMessage ?? err.message}`);
+        failures.push('the archive was not created');
+      }
     } else {
       logger.info('Did not create the encrypted archive, as it was not requested.');
     }
+
+    if (argv.targetCredentialsFile) {
+      try {
+        logger.info('Will now mirror the backup into the target vault');
+        await restore({
+          credentialsFile: argv.targetCredentialsFile, sourceDir: argv.tempDir, apply: true,
+          includePersonal: argv.includePersonal, includeOrg: argv.includeOrg,
+          org: argv.org, removed: argv.removed, force: argv.force,
+        }, { bwBin, bwBinArgs });
+      } catch (err) {
+        logger.error(`Mirroring into the target vault failed: ${err.message}`);
+        failures.push('the mirror into the target vault is incomplete');
+      }
+    }
+
     if (skippedOrgs.length > 0) {
       logger.warn(`WARNING: ${skippedOrgs.length} organization(s) were NOT backed up: ${skippedOrgs.map((o) => `${o.name} (${o.reason})`).join('; ')}`);
     }
+    if (failures.length > 0) throw new Error(`Backup finished incompletely: ${failures.join('; ')}.`);
     logger.info('DONE!');
   } finally {
     if (needsBw) {

@@ -21,6 +21,7 @@ export async function makeSandbox() {
   delete process.env.FAKE_BW_FAIL_FILE;
   delete process.env.FAKE_BW_EXTRA_ORGS;
   delete process.env.FAKE_BW_STATE;
+  delete process.env.FAKE_BW_STATE_CLIENTID;
   delete process.env.FAKE_BW_FAIL_ATTACH;
   const readLog = async (file) => (await fs.readFile(file, 'utf8').catch(() => '')).split('\n').filter(Boolean).map((l) => JSON.parse(l));
   return {
@@ -30,7 +31,7 @@ export async function makeSandbox() {
     argv: (overrides = {}) => ({
       credentialsFile, backupDir: path.join(dir, 'target'), tempDir: path.join(dir, 'ws'),
       ensureFresh: true, includePersonal: true, includeOrg: true, includeFiles: true,
-      encrypt: true, cleanUp: true, ...overrides,
+      archive: true, cleanUp: true, ...overrides,
     }),
     deps: { bwBin: FAKE_BW, sevenZipBin: FAKE_7Z },
     cleanup: () => fs.rm(dir, { recursive: true, force: true }),

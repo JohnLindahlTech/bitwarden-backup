@@ -30,7 +30,7 @@ The next major release has breaking changes:
 | --------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------- |
 | Secrets as env vars/flags: `BWBU_PASSPHRASE`, `BWBU_BW_MASTERPASSWORD`, `BWBU_BW_CLIENTID`, `BWBU_BW_CLIENTSECRET`    | One [credentials file](#credentials-file) (`clientId`, `clientSecret`, `masterPassword`, `passphrase`)                  |
 | `BWBU_BW_SESSION` / `--bwSession` to skip login                                                                       | Removed, every run logs in, unlocks and syncs in its own throwaway `bw` state                                           |
-| `bw-backup-<time>.tar.gz.7z`, `--archive` / `BWBU_ARCHIVE`                                                            | `bw-backup-<time>.7z` (no tar), the archive flag is gone                                                                |
+| `bw-backup-<time>.tar.gz.7z`, `--encrypt` / `BWBU_ENCRYPT` and `--archive` / `BWBU_ARCHIVE` (debugging switches)        | `bw-backup-<time>.7z` (no tar). One switch remains: `--archive` / `BWBU_ARCHIVE` (default on), see [Direct mode](#direct-mode) |
 | `org/<org name>/…`                                                                                                    | `org/<org name>/<org id>/…`                                                                                             |
 | Organization items and their attachments were also written to `personal/`                                             | `personal/` only holds personal items                                                                                   |
 | `unpack` decrypted a `.tar.gz` into the unpack dir, then untarred it, with no overwrite check                          | `unpack` extracts straight into `<unpackDir>/<backup name>/` and refuses a non-empty directory                         |
@@ -98,7 +98,8 @@ Every option is a flag and an environment variable (`BWBU_` + upper snake case).
 | `--includePersonal`        | `BWBU_INCLUDE_PERSONAL` | `true`                                            | Back up the personal vault.                                                                                                       |
 | `--includeOrg` (`-o`)      | `BWBU_INCLUDE_ORG`     | `true`                                            | Back up all organization vaults you belong to.                                                                                    |
 | `--includeFiles` (`-f`)    | `BWBU_INCLUDE_FILES`   | `true`                                            | Download attachments.                                                                                                             |
-| `--encrypt`                | `BWBU_ENCRYPT`         | `true`                                            | Create the encrypted archive. Debugging only, without it nothing is archived.                                                     |
+| `--archive`                | `BWBU_ARCHIVE`         | `true`                                            | Create the encrypted `.7z`. Needs a `passphrase`. Turn it off only together with `--targetCredentialsFile`.                       |
+| `--targetCredentialsFile`  | `BWBU_TARGET_CREDENTIALS_FILE` | none                                      | Also mirror the backup straight into this account, see [Direct mode](#direct-mode). Takes `--org`, `--removed` and `--force` like `restore`. |
 | `--ensureFresh`            | `BWBU_ENSURE_FRESH`    | `true`                                            | Empty the temp dir before starting. Debugging only.                                                                               |
 | `--cleanUp`                | `BWBU_CLEAN_UP`        | `true`                                            | Remove the temp dir afterwards, also after failures. Debugging only, `false` leaves plaintext behind.                             |
 | `--sourceFile` (unpack)    | `BWBU_SOURCE_FILE`     | required                                          | The `.7z` backup to unpack.                                                                                                       |
@@ -107,6 +108,27 @@ Every option is a flag and an environment variable (`BWBU_` + upper snake case).
 | –                          | `LOG_LEVEL`            | `INFO`                                            | `ERROR`, `WARN`, `INFO` or `DEBUG`. Never logs secrets or vault content.                                                          |
 
 The exit code is `0` on success and `1` on any failure (including a single attachment that could not be downloaded), so cron can alert on it.
+
+### Direct mode
+
+Instead of (or as well as) writing an archive, a backup can go straight into another vault. Give the credentials of the target account (the same file format as for `restore`, with `serverUrl` for a self-hosted server):
+
+```bash
+# archive AND mirror into the target
+bwbu backup --credentialsFile source.json --targetCredentialsFile target.json
+# mirror only: no archive is ever written, the data only exists in the temporary directory (RAM in the Docker setup)
+bwbu backup --credentialsFile source.json --targetCredentialsFile target.json --no-archive
+```
+| Flags | Result |
+| --- | --- |
+| `--credentialsFile` only | the encrypted `.7z`, as always |
+| plus `--targetCredentialsFile` | the `.7z` and a mirror into the target account |
+| plus `--no-archive` | the mirror only. No `passphrase` is needed |
+| `--no-archive` without a target | an error, there would be nowhere for the backup to go |
+
+The mirror works exactly like [`restore`](#restore-mirror) (one way, repeatable, markers, trash) and applies right away; preview the first run with `bwbu restore`. The archive and the mirror are independent: if one fails the other still happens, and the run exits with an error. The two steps stay available on their own too: `bwbu backup` writes the archive, and `bwbu restore --sourceFile` mirrors from it later.
+
+What to keep in mind: the target is a replica of the latest state, not a history (removed items only stay in its trash until that is purged), so keep the archive on if you want point-in-time copies. One job then holds the secrets of both accounts, which is why the target has its own credentials file. Both servers must be reachable in the same run.
 
 ### Restore (mirror)
 

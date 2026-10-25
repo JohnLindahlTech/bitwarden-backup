@@ -17,7 +17,7 @@ async function captureWarnings(fn) {
 test('orgs we may not export are skipped loudly, the backup still succeeds', async () => {
   const sb = await makeSandbox();
   process.env.FAKE_BW_EXTRA_ORGS = '1';
-  const argv = sb.argv({ encrypt: false, cleanUp: false });
+  const argv = sb.argv({ cleanUp: false });
   const warnings = await captureWarnings(() => backup(argv, sb.deps));
 
   // the exportable org is backed up as usual
@@ -37,7 +37,7 @@ test('orgs we may not export are skipped loudly, the backup still succeeds', asy
 
 test('no warnings when every org can be exported', async () => {
   const sb = await makeSandbox();
-  const argv = sb.argv({ encrypt: false, cleanUp: false });
+  const argv = sb.argv({ cleanUp: false });
   const warnings = await captureWarnings(() => backup(argv, sb.deps));
   assert.doesNotMatch(warnings, /NOT backed up/);
   assert.deepEqual(JSON.parse(await fs.readFile(path.join(argv.tempDir, 'org', 'skipped.json'), 'utf8')), []);
@@ -48,6 +48,6 @@ test('a real export failure on an exportable org still fails the backup', async 
   const sb = await makeSandbox();
   process.env.FAKE_BW_FAIL = 'export';
   // personal vault off, so the failing export is the org's
-  await assert.rejects(backup(sb.argv({ encrypt: false, includePersonal: false }), sb.deps), /export failed/);
+  await assert.rejects(backup(sb.argv({ includePersonal: false }), sb.deps), /export failed/);
   await sb.cleanup();
 });

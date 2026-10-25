@@ -53,7 +53,7 @@ function target() {
   }
   return false;
 }
-if (process.env.FAKE_BW_STATE && !['login', 'logout', 'sync', 'unlock', 'config'].includes(args[0]) && target()) process.exit(0);
+if (process.env.FAKE_BW_STATE && (!process.env.FAKE_BW_STATE_CLIENTID || process.env.BW_CLIENTID === process.env.FAKE_BW_STATE_CLIENTID) && !['login', 'logout', 'sync', 'unlock', 'config'].includes(args[0]) && target()) process.exit(0);
 
 if (process.env.FAKE_BW_FAIL === args[0]) fail(`boom, leaked master-pw and SESSIONKEY, FetchError: request to https://x.test/attachments/1/2?token=SECRETTOKEN failed`);
 
@@ -65,7 +65,7 @@ switch (args[0]) {
   case 'unlock': process.env.BW_PASSWORD === 'master-pw' ? out('SESSIONKEY') : fail('Invalid master password.'); break;
   case 'export':
     if (stdin() !== 'master-pw') fail('Invalid master password.');
-    fs.writeFileSync(flag('--output'), JSON.stringify({ exported: true, orgId: orgId ?? null }));
+    fs.writeFileSync(flag('--output'), JSON.stringify({ exported: true, orgId: orgId ?? null, folders: [], items: [] }));
     break;
   case 'import': {
     // restore tests: importing flips the fake target account from before.json to after.json
@@ -107,6 +107,9 @@ switch (args[0]) {
     if (fileId === process.env.FAKE_BW_FAIL_FILE) fail('attachment download failed');
     fs.mkdirSync(flag('--output'), { recursive: true });
     fs.writeFileSync(`${flag('--output')}file.txt`, `content of ${fileId}`);
+    // the real bw saves the file under its own name, which a later mirror needs to find it
+    const realName = { pa1: 'p.txt', oa1: 'a.txt', oa2: 'b.txt' }[fileId];
+    if (realName) fs.writeFileSync(`${flag('--output')}${realName}`, `content of ${fileId}`);
     break;
   }
   default: fail(`unexpected command ${args.join(' ')}`, 2);
