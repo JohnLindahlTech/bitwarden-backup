@@ -1,0 +1,21 @@
+name: E2E
+
+# Backup and mirror against a real throwaway Vaultwarden, from a fresh reset (about 10 minutes).
+# Deliberately separate from the Build workflow so it never blocks a build or a pull request.
+# Run it by hand: Actions tab -> E2E -> Run workflow. It has not run on a GitHub runner yet.
+on:
+  workflow_dispatch:
+
+jobs:
+  e2e:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - run: sudo apt-get install -y p7zip-full
+      - run: npm ci
+      - run: npm run e2e
