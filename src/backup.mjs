@@ -3,6 +3,7 @@ import os from 'node:os';
 import path from 'node:path';
 import filenamify from 'filenamify';
 import { createBw } from './bw.mjs';
+import { exportBlocker } from './orgmap.mjs';
 import { ATTACHMENTS, COLLECTIONS_FILE, EXPORT_FILE, FOLDERS_FILE, LIST_FILE, SKIPPED_FILE, ORGANIZATION, PERSONAL, RAW_FILE, TARGET_FILE_PREFIX, ARCHIVE_FILE_EXTENSION } from './constants.mjs';
 import { loadCredentials } from './credentials.mjs';
 import logger from './log.mjs';
@@ -56,14 +57,6 @@ async function backupVault(bw, { dir, orgId, includeFiles, label }) {
   } else {
     logger.info(`Did not export ${label} attachments, as it was not requested.`);
   }
-}
-
-// Why we cannot export this organization (undefined when we can). Types: 0 owner, 1 admin, 2 user.
-function exportBlocker(org) {
-  if (org.enabled === false) return 'the organization is disabled';
-  if (org.status !== undefined && org.status !== 2) return 'your membership is not confirmed yet';
-  const canExport = org.permissions?.accessImportExport ?? (org.type === 0 || org.type === 1);
-  if (!canExport) return 'you are not an owner/admin of the organization (no export permission)';
 }
 
 // Returns the organizations that were skipped, never silently.

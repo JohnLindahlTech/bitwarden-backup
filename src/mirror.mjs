@@ -37,8 +37,9 @@ function cleanContent(item) {
 // `bw list folders` also returns a pseudo folder "No Folder" with a null id, an item without folder has no folder name.
 export const folderNames = (folders) => new Map(folders.filter((f) => f.id).map((f) => [f.id, f.name]));
 
-export function fingerprint(item, folderName) {
-  const content = { ...cleanContent(item), folder: folderName ?? null };
+// `placement` is where the item lives: its folder name (personal vault) or its sorted collection names (organization).
+export function fingerprint(item, placement) {
+  const content = { ...cleanContent(item), placement: placement ?? null };
   return crypto.createHash('sha256').update(JSON.stringify(canonical(content))).digest('hex').slice(0, 32);
 }
 
@@ -50,8 +51,9 @@ export const readMarkers = (item) => {
 };
 
 // The item as sent to `bw create/edit item`, with the markers.
-export function targetPayload(item, { folderId, fp, attachments = [] }) {
-  const payload = { ...cleanContent(item), folderId: folderId ?? null, organizationId: null };
+export function targetPayload(item, { folderId, organizationId, collectionIds, fp, attachments = [] }) {
+  const payload = { ...cleanContent(item), folderId: folderId ?? null, organizationId: organizationId ?? null };
+  if (organizationId) payload.collectionIds = collectionIds ?? [];
   payload.fields = [
     ...payload.fields,
     markerField(MARKER.src, item.id),
@@ -81,8 +83,9 @@ export function markFieldsForImport(existingFields, item, fp) {
  *  - trash: mirrored items that are no longer in the source
  *  - attachments: per source item, which to upload and which synced copies to remove
  */
-export function planSync({ sourceItems, sourceFolders, targetItems, targetTrashed = [], force = false }) {
+export function planSync({ sourceItems, sourceFolders = [], placementOf, targetItems, targetTrashed = [], force = false }) {
   const names = folderNames(sourceFolders);
+  placementOf ??= (item) => names.get(item.folderId ?? null) ?? null;
   const bySrc = (items) => items.reduce((m, t) => {
     const { src } = readMarkers(t);
     return src ? m.set(src, [...(m.get(src) ?? []), t]) : m;
@@ -93,15 +96,15 @@ export function planSync({ sourceItems, sourceFolders, targetItems, targetTrashe
   const sourceIds = new Set(sourceItems.map((i) => i.id));
 
   for (const item of sourceItems) {
-    const fp = fingerprint(item, names.get(item.folderId ?? null));
-    const folderName = names.get(item.folderId ?? null) ?? null;
+    const placement = placementOf(item);
+    const fp = fingerprint(item, placement);
     const [target, ...extra] = live.get(item.id) ?? [];
     if (extra.length) plan.duplicates.push({ source: item.id, targets: [target, ...extra].map((t) => t.id) });
     const synced = (target ? readMarkers(target).attachments : []);
     const sourceAttachments = item.attachments ?? [];
     const upload = sourceAttachments.filter((a) => !synced.some((s) => s.i === a.id));
     const remove = synced.filter((s) => !sourceAttachments.some((a) => a.id === s.i));
-    const entry = { item, fp, folderName, upload, remove, target };
+    const entry = { item, fp, placement, upload, remove, target };
 
     if (!target) {
       const back = trashed.get(item.id)?.[0];

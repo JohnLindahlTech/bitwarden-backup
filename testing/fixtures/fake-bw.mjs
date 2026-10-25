@@ -21,11 +21,17 @@ function target() {
   const body = () => JSON.parse(Buffer.from(stdin(), 'base64').toString());
   const find = (id) => state.items.find((i) => i.id === id);
   const [cmd, kind] = args;
-  if (cmd === 'list' && !orgId && kind === 'items') { out(state.items.filter((i) => Boolean(i.deletedDate) === args.includes('--trash'))); return true; }
-  if (cmd === 'list' && !orgId && kind === 'folders') { out([{ id: null, name: 'No Folder' }, ...state.folders]); return true; }
+  // like the real bw: without an org id the list contains the organization items too
+  if (cmd === 'list' && kind === 'items') { out(state.items.filter((i) => Boolean(i.deletedDate) === args.includes('--trash') && (!orgId || i.organizationId === orgId))); return true; }
+  if (cmd === 'list' && kind === 'organizations' && state.orgs) { out(state.orgs); return true; }
+  if (cmd === 'list' && kind === 'org-collections' && state.collections) { out(state.collections.filter((c) => c.organizationId === orgId)); return true; }
+  if (cmd === 'create' && kind === 'org-collection') { const c = { id: next('tc'), ...body() }; (state.collections ??= []).push(c); save(); out(c); return true; }
+  if (cmd === 'edit' && kind === 'item-collections') { const item = find(args[2]); item.collectionIds = body(); save(); out(item); return true; }
+  if (cmd === 'list' && kind === 'folders') { out([{ id: null, name: 'No Folder' }, ...state.folders]); return true; }
   if (cmd === 'create' && kind === 'folder') { const f = { id: next('tf'), name: body().name }; state.folders.push(f); save(); out(f); return true; }
   if (cmd === 'create' && kind === 'item') { const item = { ...body(), id: next('t'), attachments: [], deletedDate: null }; state.items.push(item); save(); out(item); return true; }
-  if (cmd === 'edit' && kind === 'item') { const old = find(args[2]); Object.assign(old, body(), { id: old.id, attachments: old.attachments, deletedDate: old.deletedDate }); save(); out(old); return true; }
+  // like the real bw, `edit item` leaves collections alone (see edit item-collections)
+  if (cmd === 'edit' && kind === 'item') { const old = find(args[2]); Object.assign(old, body(), { id: old.id, attachments: old.attachments, deletedDate: old.deletedDate, collectionIds: old.collectionIds }); save(); out(old); return true; }
   if (cmd === 'get' && kind === 'item') { out(find(args[2])); return true; }
   if (cmd === 'delete' && kind === 'item') { find(args[2]).deletedDate = 'now'; save(); return true; }
   if (cmd === 'restore' && kind === 'item') { const item = find(args[2]); item.deletedDate = null; save(); out('Item restored.'); return true; }

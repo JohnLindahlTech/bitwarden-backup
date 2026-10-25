@@ -86,6 +86,11 @@ export function createBw({ credentials, appDataDir, bin = process.execPath, binA
     listFolders: () => json(['list', 'folders']),
     listOrgs: () => json(['list', 'organizations']),
     listOrgCollections: ({ orgId }) => json(['list', 'org-collections', ...orgArgs(orgId)]),
+    createOrgCollection: ({ orgId, name }) =>
+      json(['create', 'org-collection', ...orgArgs(orgId)], { input: encode({ organizationId: orgId, name, externalId: null, groups: [] }) }),
+    // `edit item` does not move an item between collections, this does.
+    editItemCollections: ({ id, orgId, collectionIds }) =>
+      json(['edit', 'item-collections', id, ...orgArgs(orgId)], { input: encode(collectionIds) }),
 
     // `format` is a bw import format name, 'bitwardenjson' is what our export.json is.
     importFile: ({ file, format = 'bitwardenjson', orgId }) => run(['import', format, file, ...orgArgs(orgId)]),
