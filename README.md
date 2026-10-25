@@ -252,6 +252,8 @@ The generated credentials (random passwords) are in `tmp/test-vw-a.json` and `tm
 
 ## Development
 
+The page shown on Docker Hub is [`DOCKERHUB.md`](DOCKERHUB.md), written for people who only run the image. This README is for developers and details; keep the two in step when a flag or the credentials format changes.
+
 ```bash
 nvm use && npm ci && npm test
 ```

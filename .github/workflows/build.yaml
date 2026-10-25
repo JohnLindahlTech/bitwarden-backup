@@ -70,3 +70,6 @@ jobs:
           username: ${{ secrets.DOCKER_API_USER }}
           password: ${{ secrets.DOCKER_API_KEY }}
           repository: ${{ env.IMAGE }}
+          # The Docker Hub page is written for people who just run the image, not the developer README.
+          readme-filepath: ./DOCKERHUB.md
+          short-description: Encrypted Bitwarden backups of your vault, organizations and attachments, optionally mirrored.
