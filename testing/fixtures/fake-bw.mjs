@@ -26,7 +26,7 @@ function target() {
   if (cmd === 'list' && kind === 'organizations' && state.orgs) { out(state.orgs); return true; }
   if (cmd === 'list' && kind === 'org-collections' && state.collections) { out(state.collections.filter((c) => c.organizationId === orgId)); return true; }
   if (cmd === 'create' && kind === 'org-collection') { const c = { id: next('tc'), ...body() }; (state.collections ??= []).push(c); save(); out(c); return true; }
-  if (cmd === 'edit' && kind === 'item-collections') { const item = find(args[2]); item.collectionIds = body(); save(); out(item); return true; }
+  if (cmd === 'edit' && kind === 'item-collections') { const item = find(args[2]); item.collectionIds = body(); save(); out('Edited item collections.'); return true; }
   if (cmd === 'list' && kind === 'folders') { out([{ id: null, name: 'No Folder' }, ...state.folders]); return true; }
   if (cmd === 'create' && kind === 'folder') { const f = { id: next('tf'), name: body().name }; state.folders.push(f); save(); out(f); return true; }
   if (cmd === 'create' && kind === 'item') { const item = { ...body(), id: next('t'), attachments: [], deletedDate: null }; state.items.push(item); save(); out(item); return true; }
