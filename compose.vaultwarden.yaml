@@ -59,11 +59,35 @@ services:
     environment:
       BWBU_CREDENTIALS_FILE: /run/secrets/bwbu_test_credentials
       NODE_EXTRA_CA_CERTS: /ssl/ca.crt # trust the playground's throwaway CA
+      BWBU_INCLUDE_ORG: ${BWBU_INCLUDE_ORG:-true}
       LOG_LEVEL: ${LOG_LEVEL:-INFO}
     # Shares vaultwarden's network namespace: inside this container https://localhost:8222 IS Vaultwarden, exactly like
     # for your browser. Needed because Vaultwarden builds attachment download links from its DOMAIN setting.
     network_mode: "service:vaultwarden"
     depends_on: [vaultwarden]
+
+  # Unpacks a backup of the test user (TEST_USER, default a) from ./tmp/backup-test-<user> into ./tmp/unpack-test-<user>.
+  #   E2E_ARCHIVE=bw-backup-<time>.7z docker compose -f compose.vaultwarden.yaml run --rm unpack-test
+  unpack-test:
+    build: .
+    image: bwbu:local
+    pull_policy: build
+    user: "${BWBU_UID:-1000}:${BWBU_GID:-1000}"
+    read_only: true
+    tmpfs:
+      - /tmp:size=1g,mode=1777
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    restart: "no"
+    command: unpack
+    secrets: [bwbu_test_credentials]
+    volumes:
+      - ./tmp/backup-test-${TEST_USER:-a}:/backup:ro
+      - ./tmp/unpack-test-${TEST_USER:-a}:/unpack
+    environment:
+      BWBU_CREDENTIALS_FILE: /run/secrets/bwbu_test_credentials
+      BWBU_SOURCE_FILE: /backup/${E2E_ARCHIVE:-missing.7z}
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
 
   # Mirrors an unpacked backup into test user b (repeatable, one way). Dry run unless BWBU_APPLY=true.
   #   BWBU_APPLY=true docker compose -f compose.vaultwarden.yaml run --rm restore-test
@@ -82,7 +106,7 @@ services:
     command: restore --sourceDir /source
     secrets: [bwbu_restore_target]
     volumes:
-      - ./tmp/restore-source:/source:ro
+      - ${RESTORE_SOURCE:-./tmp/restore-source}:/source:ro
       - ./tmp/vw-tls/ca.crt:/ssl/ca.crt:ro
     environment:
       BWBU_CREDENTIALS_FILE: /run/secrets/bwbu_restore_target

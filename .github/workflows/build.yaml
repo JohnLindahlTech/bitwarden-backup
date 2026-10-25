@@ -1,5 +1,6 @@
 name: Build
 on:
+  workflow_dispatch:
   pull_request:
   push:
     branches:
@@ -15,6 +16,23 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npm test
+
+  # Backup and mirror against a real throwaway Vaultwarden, from a fresh reset (about 10 minutes).
+  # Manual only (Actions tab -> Build -> Run workflow) until it has proven itself on a GitHub runner.
+  e2e:
+    needs: test
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - run: sudo apt-get install -y p7zip-full
+      - run: npm ci
+      - run: npm run e2e
 
   # Pull requests: prove the image builds for both CPU types, without pushing anything.
   image-check:

@@ -103,6 +103,7 @@ Every option is a flag and an environment variable (`BWBU_` + upper snake case).
 | `--cleanUp`                | `BWBU_CLEAN_UP`        | `true`                                            | Remove the temp dir afterwards, also after failures. Debugging only, `false` leaves plaintext behind.                             |
 | `--sourceFile` (unpack)    | `BWBU_SOURCE_FILE`     | required                                          | The `.7z` backup to unpack.                                                                                                       |
 | `--unpackDir` (`-u`)       | `BWBU_UNPACK_DIR`      | `/tmp/bwbu/unpack` (`/unpack`)                    | Parent directory for the unpacked backup. Plaintext, delete it when done.                                                         |
+| –                          | `BWBU_SEVENZIP_BIN`    | `7z`                                              | The 7-Zip executable to use. Only needed outside the Docker image, where Homebrew installs it as `7zz`.                            |
 | –                          | `LOG_LEVEL`            | `INFO`                                            | `ERROR`, `WARN`, `INFO` or `DEBUG`. Never logs secrets or vault content.                                                          |
 
 The exit code is `0` on success and `1` on any failure (including a single attachment that could not be downloaded), so cron can alert on it.
@@ -226,6 +227,20 @@ nvm use && npm ci && npm test
 ```
 
 Tests use fake `bw` and `7z` executables (`testing/fixtures`), no credentials needed.
+
+### End-to-end tests
+
+`npm run e2e` runs the real scripts (`node src/index.mjs`) against a real, throwaway Vaultwarden, starting from a fresh `playground --reset` so every run is isolated (it destroys the playground's data in `tmp/`, nothing else). It needs Docker, and takes around 15 to 20 minutes because the `bw` CLI makes one request at a time. In order, it checks that:
+
+1. a backup of the seeded account is complete: items, folders, both same-named organizations and every attachment byte for byte;
+2. the first mirror into the empty account imports everything, and a backup of that account is identical;
+3. mirroring again changes nothing;
+4. an edit, a new item with an attachment, a trashed item and swapped attachments in the source all follow, and the user's own fields, TOTP and notes survive;
+5. an item restored from the source's trash is restored from the target's trash and not duplicated;
+6. items on the target that the tool did not create are left alone, and removals only trash mirrored items;
+7. everything has converged and a further run is a no-op.
+
+It needs 7-Zip on the host (`7z`, or `7zz` from `brew install sevenzip`; `BWBU_SEVENZIP_BIN` overrides). `npm run e2e:smoke` runs only the first three. `npm run e2e:image` runs those three through the Docker image instead, to prove the packaged environment (read-only filesystem, non-root uid, CA and secret mounts). The fast `npm test` never touches Docker or a server.
 
 ## Roadmap / TODO
 

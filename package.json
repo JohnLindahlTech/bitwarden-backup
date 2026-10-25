@@ -5,7 +5,10 @@
   "main": "src/index.mjs",
   "scripts": {
     "test": "node --test \"test/*.test.mjs\"",
-    "playground": "node scripts/playground.mjs"
+    "playground": "node scripts/playground.mjs",
+    "e2e": "node --test --test-concurrency=1 \"e2e/*.test.mjs\"",
+    "e2e:smoke": "node --test --test-concurrency=1 --test-name-pattern=\"^[123]\\\\.\" \"e2e/*.test.mjs\"",
+    "e2e:image": "E2E_MODE=container node --test --test-concurrency=1 --test-name-pattern=\"^[123]\\\\.\" \"e2e/*.test.mjs\""
   },
   "bin": {
     "bwbu": "src/index.mjs"
