@@ -28,7 +28,7 @@ function target() {
   if (cmd === 'edit' && kind === 'item') { const old = find(args[2]); Object.assign(old, body(), { id: old.id, attachments: old.attachments, deletedDate: old.deletedDate }); save(); out(old); return true; }
   if (cmd === 'get' && kind === 'item') { out(find(args[2])); return true; }
   if (cmd === 'delete' && kind === 'item') { find(args[2]).deletedDate = 'now'; save(); return true; }
-  if (cmd === 'restore' && kind === 'item') { const item = find(args[2]); item.deletedDate = null; save(); out(item); return true; }
+  if (cmd === 'restore' && kind === 'item') { const item = find(args[2]); item.deletedDate = null; save(); out('Item restored.'); return true; }
   if (cmd === 'create' && kind === 'attachment') {
     const path = flag('--file');
     if (process.env.FAKE_BW_FAIL_ATTACH && path.includes(process.env.FAKE_BW_FAIL_ATTACH)) fail('upload failed');

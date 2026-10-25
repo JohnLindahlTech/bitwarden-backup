@@ -95,7 +95,8 @@ export function createBw({ credentials, appDataDir, bin = process.execPath, binA
     editItem: (id, item) => json(['edit', 'item', id], { input: encode(item) }),
     getItem: (id) => json(['get', 'item', id]),
     deleteItem: (id) => run(['delete', 'item', id]), // to the trash, not permanent
-    restoreItem: (id) => json(['restore', 'item', id]),
+    // bw prints a plain message here, not the item, so read it back
+    restoreItem: async (id) => { await run(['restore', 'item', id]); return json(['get', 'item', id]); },
     createFolder: (name) => json(['create', 'folder'], { input: encode({ name }) }),
 
     // Both return/affect the item, createAttachment returns it with its attachments list.
