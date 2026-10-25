@@ -65,7 +65,7 @@ services:
     network_mode: "service:vaultwarden"
     depends_on: [vaultwarden]
 
-  # Restores an unpacked backup into the (empty) test user b. Dry run unless BWBU_APPLY=true.
+  # Mirrors an unpacked backup into test user b (repeatable, one way). Dry run unless BWBU_APPLY=true.
   #   BWBU_APPLY=true docker compose -f compose.vaultwarden.yaml run --rm restore-test
   # The backup to restore is read from ./tmp/restore-source (an unpacked backup, containing personal/).
   restore-test:

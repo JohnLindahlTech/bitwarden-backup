@@ -5,6 +5,7 @@ import logger from './log.mjs';
 
 // Run bw's JS entrypoint with the current node, so no shell, `env` or PATH lookup is needed.
 const BW_SCRIPT = fileURLToPath(new URL('../node_modules/@bitwarden/cli/build/bw.js', import.meta.url));
+const encode = (obj) => Buffer.from(JSON.stringify(obj)).toString('base64');
 const ALREADY_LOGGED_IN_REGEX = /You are already logged in as/;
 
 /**
@@ -81,7 +82,7 @@ export function createBw({ credentials, appDataDir, bin = process.execPath, binA
     exportVault: ({ file, orgId, format = 'json' }) =>
       run(['export', '--format', format, '--output', file, ...orgArgs(orgId)], { input: credentials.masterPassword }),
 
-    listItems: ({ orgId } = {}) => json(['list', 'items', ...orgArgs(orgId)]),
+    listItems: ({ orgId, trash } = {}) => json(['list', 'items', ...(trash ? ['--trash'] : []), ...orgArgs(orgId)]),
     listFolders: () => json(['list', 'folders']),
     listOrgs: () => json(['list', 'organizations']),
     listOrgCollections: ({ orgId }) => json(['list', 'org-collections', ...orgArgs(orgId)]),
@@ -89,7 +90,17 @@ export function createBw({ credentials, appDataDir, bin = process.execPath, binA
     // `format` is a bw import format name, 'bitwardenjson' is what our export.json is.
     importFile: ({ file, format = 'bitwardenjson', orgId }) => run(['import', format, file, ...orgArgs(orgId)]),
 
-    createAttachment: ({ file, itemId }) => run(['create', 'attachment', '--file', file, '--itemid', itemId]),
+    // Items go to bw as base64 JSON on stdin, so passwords never show up in a process list. Returns the item.
+    createItem: (item) => json(['create', 'item'], { input: encode(item) }),
+    editItem: (id, item) => json(['edit', 'item', id], { input: encode(item) }),
+    getItem: (id) => json(['get', 'item', id]),
+    deleteItem: (id) => run(['delete', 'item', id]), // to the trash, not permanent
+    restoreItem: (id) => json(['restore', 'item', id]),
+    createFolder: (name) => json(['create', 'folder'], { input: encode({ name }) }),
+
+    // Both return/affect the item, createAttachment returns it with its attachments list.
+    createAttachment: ({ file, itemId }) => json(['create', 'attachment', '--file', file, '--itemid', itemId]),
+    deleteAttachment: ({ attachmentId, itemId }) => run(['delete', 'attachment', attachmentId, '--itemid', itemId]),
 
     getAttachment: ({ fileId, itemId, orgId, output }) =>
       run(['get', 'attachment', fileId, '--itemid', itemId, '--output', output, ...orgArgs(orgId)]),

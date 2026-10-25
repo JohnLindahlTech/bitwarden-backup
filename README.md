@@ -20,7 +20,7 @@ It supports:
 
 Scope: an offline backup of your vault in open, portable formats (plain JSON and the original attachment files, inside a standard 7z) that you can read and import without Bitwarden. It does not store Bitwarden's own formats, such as the encrypted JSON export or the CLI's local vault cache, which only work with Bitwarden.
 
-Restoring the **personal vault** (items, folders and attachments) into a Bitwarden/Vaultwarden account works, see [Restore](#restore). Restoring organizations is not implemented yet (see the [Roadmap](#roadmap--todo)).
+Mirroring the **personal vault** (items, folders and attachments) into a Bitwarden/Vaultwarden account works and is repeatable, see [Restore (mirror)](#restore-mirror). Organizations are not mirrored yet (see the [Roadmap](#roadmap--todo)).
 
 ## Upgrading from 1.x
 
@@ -107,25 +107,44 @@ Every option is a flag and an environment variable (`BWBU_` + upper snake case).
 
 The exit code is `0` on success and `1` on any failure (including a single attachment that could not be downloaded), so cron can alert on it.
 
-### Restore
+### Restore (mirror)
 
-Restores the personal vault of a backup into an **empty** account. The credentials file is the one of the **target** account (`serverUrl` for a self-hosted server), and it needs a `passphrase` only when you give a `.7z` with `--sourceFile` (use the passphrase the backup was made with).
+`bwbu restore` (alias `sync`) mirrors the personal vault of a backup into a target account, for example a local Vaultwarden. It is built to run on a schedule against a vault that **already exists**: each run adds what is new, updates what changed and leaves everything else alone.
+
+**Use the target as a read-only replica.** The data flows one way, from the backup into the target, and the backup is the source of truth. Do your own edits in the source vault, not in the replica: a change made in the replica is not tracked, and it is overwritten when the same item changes in the source.
 
 ```bash
-# 1. dry run (the default): reads the backup, shows what it holds, changes nothing
+# 1. dry run (the default): shows the plan, changes nothing
 bwbu restore --credentialsFile target.json --sourceFile bw-backup-<time>.7z
-# 2. really restore
+# 2. really mirror
 bwbu restore --credentialsFile target.json --sourceFile bw-backup-<time>.7z --apply
 ```
-Instead of `--sourceFile` you can point `--sourceDir` at an already unpacked backup. In Docker mount the files as for a backup and run the `restore` command.
+The credentials file is the one of the **target** account (`serverUrl` for a self-hosted server). It needs a `passphrase` only when you use `--sourceFile` (the one the backup was made with). Instead you can point `--sourceDir` at an unpacked backup.
 
-How it works and what it protects you from:
+What a run does:
 
-- It imports `personal/export.json` with Bitwarden's own import (`bitwardenjson`), then uploads every attachment to the matching new item. Imports give items new ids, so items are matched on type, name, folder, username, URIs and notes.
-- **It never guesses.** Items with attachments that cannot be matched with certainty (for example two identical items) are reported with their old ids and skipped, and the command exits with an error. The files are still in the backup under `personal/attachments/`.
-- Nothing happens without `--apply`, and a target that already has items or folders is refused unless you pass `--allowNonEmpty` (which can create duplicates).
-- A restored item is a new item: Bitwarden's import decides which details survive (for example creation and revision dates may not).
-- Organizations are not restored yet.
+| In the backup | On the target |
+| --- | --- |
+| a new item | created |
+| a changed item | updated (Bitwarden keeps the password history) |
+| an unchanged item | nothing at all, no `bw` call |
+| an item that is gone | moved to the target's **trash** (recoverable), never deleted. `--removed keep` leaves it |
+| a gone item that returns | restored from the trash, not duplicated |
+| attachments added or removed | uploaded or removed, exactly those |
+| an empty target | one bulk import, then the attachments |
+| items the target already has that this tool did not create | left alone, and counted in the summary |
+
+A failed upload or edit is reported at the end (exit code 1) and retried by the next run, because only what succeeded is recorded. `--force` rewrites all mirrored items.
+
+**How it knows what is what.** Nothing is stored outside the vault. Every mirrored item carries three custom fields, so the mapping lives in the target vault itself and survives losing the machine that runs the job:
+
+- `bwbu:v1:src`: the id of the item in the source vault,
+- `bwbu:v1:fp`: a fingerprint of the source content that was written, to skip unchanged items,
+- `bwbu:v1:att`: which attachments are synced (source id to target id).
+
+Do not delete these fields. An item without them looks new and is created again (the old one stays, as an item that is not ours). Items are sent to `bw` over stdin, never as command line arguments.
+
+Limits: folders are matched by name and never deleted; passkeys are not restored; creation and revision dates are set by the target; only the personal vault is mirrored so far, organizations are not.
 
 ### Backup layout
 
@@ -185,7 +204,7 @@ Do not pass the passphrase with `-p<passphrase>`, it ends up in shell history an
 - Organization members, roles, groups, per-collection permissions and policies are not part of the export.
 - Attachments are downloaded one at a time (about 4 seconds each), by design, see above.
 - There is no incremental backup, every run creates a complete new archive. Prune old ones yourself.
-- Only the personal vault can be restored so far. For organizations the plaintext JSON in the archive can be imported by hand (attachments are not part of that import).
+- Only the personal vault can be mirrored so far. For organizations the plaintext JSON in the archive can be imported by hand (attachments are not part of that import).
 
 ## Local Vaultwarden playground
 
@@ -195,7 +214,7 @@ For practicing backups (and later restores) without touching a real account: `np
 npm run playground                                               # certs, Vaultwarden, users a@test.local and b@test.local
 docker compose -f compose.vaultwarden.yaml run --rm bwbu-test    # back up user a -> ./tmp/backup-test-a
 ```
-To try a restore: unpack the backup of `a` into `tmp/restore-source`, then `BWBU_APPLY=true docker compose -f compose.vaultwarden.yaml run --rm restore-test` restores it into the empty `b` (leave out `BWBU_APPLY` for a dry run). `TEST_USER=b docker compose -f compose.vaultwarden.yaml run --rm bwbu-test` backs up `b`, and `node scripts/verify-against-seed.mjs <unpacked dir> --personal-only` checks it against what was seeded.
+To try the mirror: unpack the backup of `a` into `tmp/restore-source`, then `BWBU_APPLY=true docker compose -f compose.vaultwarden.yaml run --rm restore-test` mirrors it into `b` (leave out `BWBU_APPLY` for a dry run). Change something in `a`, back it up again and rerun it to see `b` follow. `TEST_USER=b docker compose -f compose.vaultwarden.yaml run --rm bwbu-test` backs up `b`, and `node scripts/verify-against-seed.mjs <unpacked dir> --personal-only` checks it against what was seeded.
 The generated credentials (random passwords) are in `tmp/test-vw-a.json` and `tmp/test-vw-b.json`, both git-ignored.
 
 `a@test.local` is seeded with test data: a folder, logins, a note and a card, attachments of different sizes (including a 12 byte one and an item with two), a name with odd characters, an item whose name also exists in an organization, and **two organizations with the same name** (with collections, items and attachments). What exists, with the sha256 of every attachment, is recorded in `tmp/test-vw-a.seed.json`. `b@test.local` stays empty, as a restore target. To check a backup of `a` after unpacking it: `node scripts/verify-against-seed.mjs <unpacked dir>`.
@@ -210,6 +229,6 @@ Tests use fake `bw` and `7z` executables (`testing/fixtures`), no credentials ne
 
 ## Roadmap / TODO
 
-- Restore organization vault(s), including their collections and attachments.
+- Mirror organization vault(s), including their collections and attachments.
 - Restore organizational vault(s) into a (new) Bitwarden Organization from a backup archive.
 - Verify a backup after it is written (extract it and compare the counts with `items.json`).

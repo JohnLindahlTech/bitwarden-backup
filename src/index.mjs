@@ -46,13 +46,14 @@ try {
       unpack,
     )
     .command(
-      'restore',
-      'Restores the personal vault of a backup into the (empty) account of the credentials file. Dry run unless --apply.',
+      ['restore', 'sync'],
+      'Mirrors the personal vault of a backup into the account of the credentials file (one way: the backup wins). Safe to repeat. Dry run unless --apply.',
       {
         sourceDir: { describe: 'An unpacked backup directory (containing personal/).' },
         sourceFile: { describe: 'A .7z backup. Its passphrase is read from the credentials file.' },
-        apply: bool('Really restore. Without it only a dry run is done.', false),
-        allowNonEmpty: bool('Import even if the target account already has items (can create duplicates).', false),
+        apply: bool('Really change the target account. Without it only a dry run (the plan) is shown.', false),
+        removed: { describe: 'What to do with mirrored items that are gone from the backup: "trash" (recoverable) or "keep".', default: 'trash', choices: ['trash', 'keep'] },
+        force: bool('Rewrite all mirrored items, even if they did not change.', false),
       },
       restore,
     )

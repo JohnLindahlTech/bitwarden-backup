@@ -12,6 +12,43 @@ fs.appendFileSync(process.env.FAKE_BW_LOG, JSON.stringify({ args, session: proce
 const fail = (msg, code = 1) => { process.stderr.write(`${msg}\n`); process.exit(code); };
 const out = (data) => process.stdout.write(typeof data === 'string' ? data : JSON.stringify(data));
 
+// --- stateful fake target account (restore/mirror tests): FAKE_BW_STATE is a JSON file {items, folders, seq} ---
+function target() {
+  const file = process.env.FAKE_BW_STATE;
+  const state = JSON.parse(fs.readFileSync(file, 'utf8'));
+  const save = () => fs.writeFileSync(file, JSON.stringify(state));
+  const next = (prefix) => `${prefix}${++state.seq}`;
+  const body = () => JSON.parse(Buffer.from(stdin(), 'base64').toString());
+  const find = (id) => state.items.find((i) => i.id === id);
+  const [cmd, kind] = args;
+  if (cmd === 'list' && !orgId && kind === 'items') { out(state.items.filter((i) => Boolean(i.deletedDate) === args.includes('--trash'))); return true; }
+  if (cmd === 'list' && !orgId && kind === 'folders') { out([{ id: null, name: 'No Folder' }, ...state.folders]); return true; }
+  if (cmd === 'create' && kind === 'folder') { const f = { id: next('tf'), name: body().name }; state.folders.push(f); save(); out(f); return true; }
+  if (cmd === 'create' && kind === 'item') { const item = { ...body(), id: next('t'), attachments: [], deletedDate: null }; state.items.push(item); save(); out(item); return true; }
+  if (cmd === 'edit' && kind === 'item') { const old = find(args[2]); Object.assign(old, body(), { id: old.id, attachments: old.attachments, deletedDate: old.deletedDate }); save(); out(old); return true; }
+  if (cmd === 'get' && kind === 'item') { out(find(args[2])); return true; }
+  if (cmd === 'delete' && kind === 'item') { find(args[2]).deletedDate = 'now'; save(); return true; }
+  if (cmd === 'restore' && kind === 'item') { const item = find(args[2]); item.deletedDate = null; save(); out(item); return true; }
+  if (cmd === 'create' && kind === 'attachment') {
+    const path = flag('--file');
+    if (process.env.FAKE_BW_FAIL_ATTACH && path.includes(process.env.FAKE_BW_FAIL_ATTACH)) fail('upload failed');
+    const item = find(flag('--itemid'));
+    item.attachments.push({ id: next('ta'), fileName: path.split('/').at(-1), size: fs.statSync(path).size });
+    save(); out(item); return true;
+  }
+  if (cmd === 'delete' && kind === 'attachment') { const item = find(flag('--itemid')); item.attachments = item.attachments.filter((a) => a.id !== args[2]); save(); return true; }
+  if (cmd === 'import') {
+    const data = JSON.parse(fs.readFileSync(args[2], 'utf8'));
+    const ids = new Map();
+    for (const f of data.folders ?? []) { const created = { id: next('tf'), name: f.name }; state.folders.push(created); ids.set(f.id, created.id); }
+    for (const i of data.items) state.items.push({ ...i, id: next('t'), folderId: ids.get(i.folderId) ?? null, attachments: [], deletedDate: null });
+    state.imports = (state.imports ?? 0) + 1;
+    save(); return true;
+  }
+  return false;
+}
+if (process.env.FAKE_BW_STATE && !['login', 'logout', 'sync', 'unlock', 'config'].includes(args[0]) && target()) process.exit(0);
+
 if (process.env.FAKE_BW_FAIL === args[0]) fail(`boom, leaked master-pw and SESSIONKEY, FetchError: request to https://x.test/attachments/1/2?token=SECRETTOKEN failed`);
 
 switch (args[0]) {
