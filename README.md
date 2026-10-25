@@ -22,7 +22,7 @@ Scope: an offline backup of your vault in open, portable formats (plain JSON and
 
 Mirroring the **personal vault** and the **organizations** (items, folders or collections, and attachments) into a Bitwarden/Vaultwarden account is repeatable, see [Restore (mirror)](#restore-mirror). The organization part has so far only been tested against a fake `bw`, not yet against a real server (see the [Roadmap](#roadmap--todo)).
 
-## Upgrading from 1.x
+## Upgrading from 0.x
 
 The next major release has breaking changes:
 

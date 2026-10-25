@@ -97,9 +97,9 @@ docker run --rm \
 - Add `-e BWBU_ARCHIVE=false` to skip the backup file and only keep the copy. Nothing is then written to disk, and no passphrase is needed.
 - Organizations must already exist in the second vault. If an organization cannot be matched safely (for example two with the same name), it is skipped with a clear warning and the exact setting to add.
 
-## Updating from version 1
+## Updating from an earlier version (0.x)
 
-Version 2 no longer takes passwords from environment variables (`BWBU_PASSPHRASE`, `BWBU_BW_MASTERPASSWORD`, `BWBU_BW_CLIENTID`, `BWBU_BW_CLIENTSECRET`). Put those four values in the credentials file from step 1 instead. Backups are now named `bw-backup-<time>.7z` and are a single 7-Zip file; organizations are stored in `org/<name>/<id>/`.
+Version 1.0 and later no longer take passwords from environment variables (`BWBU_PASSPHRASE`, `BWBU_BW_MASTERPASSWORD`, `BWBU_BW_CLIENTID`, `BWBU_BW_CLIENTSECRET`). Put those four values in the credentials file from step 1 instead. Backups are now named `bw-backup-<time>.7z` and are a single 7-Zip file; organizations are stored in `org/<name>/<id>/`.
 
 ## Good to know
 
